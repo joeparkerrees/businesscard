@@ -1,0 +1,313 @@
+/* ─────────────────────────────────────────────────────────
+   Joe Parker-Rees — digital business card
+
+   Design tokens hand-ported from the newportfolio design system
+   (src/app/globals.css) rather than pulled in as a dependency: this page
+   stays a static single file so it loads fast on conference wifi.
+   ───────────────────────────────────────────────────────── */
+
+@font-face {
+  font-family: 'Octave';
+  src: url('fonts/Octave-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Romie';
+  src: url('fonts/Romie-MediumItalic.woff2') format('woff2');
+  font-weight: 500;
+  font-style: italic;
+  font-display: swap;
+}
+
+:root {
+  --background: #FBFEFC;
+  --foreground: #00220A;
+  --dark-green: #00220A;
+  --dark-green-40: rgba(0, 34, 10, 0.4);
+  --dark-green-10: rgba(0, 34, 10, 0.1);
+  --bento-frame: #EEF3EA;
+  --radius-card: 4px;
+  --radius-overlay: 36px;
+  --ease: cubic-bezier(0.215, 0.61, 0.355, 1);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: 'Octave', sans-serif;
+  font-size: 14px;
+  line-height: 1.04;
+  font-weight: 400;
+  letter-spacing: -0.05em;
+  -webkit-font-smoothing: antialiased;
+  /* The card is a fixed single screen — nothing here should ever scroll,
+     and rubber-banding while someone tilts the phone feels broken. */
+  overscroll-behavior: none;
+}
+
+/* The display tracking (-0.05em) bites at small sizes; loosen for UI text. */
+.tracking-ui { letter-spacing: -0.02em; }
+
+/* ── Shell ───────────────────────────────────────────── */
+
+.card {
+  display: flex;
+  flex-direction: column;
+  min-height: 100svh;
+  padding:
+    calc(env(safe-area-inset-top) + 20px)
+    calc(env(safe-area-inset-right) + 20px)
+    calc(env(safe-area-inset-bottom) + 20px)
+    calc(env(safe-area-inset-left) + 20px);
+  gap: 16px;
+}
+
+.meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--dark-green-40);
+  flex: none;
+}
+
+/* ── 3D stage ────────────────────────────────────────── */
+
+.stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 180px;
+  border-radius: var(--radius-overlay);
+  background: var(--bento-frame);
+  overflow: hidden;
+}
+
+#head-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none; /* we handle drag ourselves */
+}
+
+.stage__ui {
+  position: absolute;
+  inset: auto 0 16px 0;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.stage__ui > * { pointer-events: auto; }
+
+.hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--dark-green-40);
+  transition: opacity 0.4s var(--ease);
+}
+
+.hint[data-state='active'] { opacity: 0; }
+
+/* ── CTA — conic gradient border, ported from the portfolio ── */
+
+@property --cta-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes cta-gradient-spin {
+  to { --cta-angle: 360deg; }
+}
+
+.cta {
+  position: relative;
+  border: 0;
+  padding: 2px; /* reveals the gradient as a hairline border */
+  border-radius: 100px;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+}
+
+.cta[hidden] { display: none; }
+
+.cta__border {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: conic-gradient(
+    from var(--cta-angle),
+    #f0fe09,
+    #00ff85,
+    #fb0bc6,
+    #f0fe09
+  );
+  animation: cta-gradient-spin 6s linear infinite;
+  will-change: --cta-angle;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+.cta__face {
+  position: relative;
+  display: block;
+  padding: 10px 18px;
+  border-radius: inherit;
+  background: var(--background);
+  color: var(--foreground);
+  font-size: 12px;
+}
+
+/* ── Identity ────────────────────────────────────────── */
+
+.identity { flex: none; }
+
+.identity__name {
+  margin: 0;
+  font-size: clamp(34px, 10.5vw, 52px);
+  font-weight: 400;
+  line-height: 0.98;
+  letter-spacing: -0.05em;
+}
+
+.identity__role {
+  margin: 8px 0 0;
+  font-size: 15px;
+  color: var(--dark-green-40);
+}
+
+.identity__role em {
+  font-family: 'Romie', serif;
+  font-style: italic;
+  font-weight: 500;
+  color: var(--foreground);
+}
+
+/* ── Details: QR + links ─────────────────────────────── */
+
+.details {
+  flex: none;
+  display: flex;
+  align-items: flex-end;
+  gap: 20px;
+}
+
+.qr { flex: none; }
+
+.qr__frame {
+  padding: 8px;
+  background: #FFFFFF;
+  border: 1px solid var(--dark-green-10);
+  border-radius: var(--radius-card);
+  line-height: 0;
+}
+
+.qr__img {
+  display: block;
+  width: clamp(112px, 32vw, 140px);
+  height: auto;
+  /* Keep module edges hard when the SVG is scaled to a non-integer size —
+     a blurred QR is a QR that takes three tries to scan. */
+  image-rendering: pixelated;
+}
+
+.qr__switch {
+  display: flex;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.qr__switch button {
+  flex: 1;
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 11px;
+  color: var(--dark-green-40);
+  background: var(--bento-frame);
+  border: 0;
+  border-radius: var(--radius-card);
+  cursor: pointer;
+  transition: background 0.2s var(--ease), color 0.2s var(--ease);
+}
+
+.qr__switch button[aria-selected='true'] {
+  background: var(--foreground);
+  color: var(--background);
+}
+
+.links {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: 13px;
+}
+
+.links a {
+  color: var(--foreground);
+  text-decoration: none;
+  border-bottom: 1px solid var(--dark-green-10);
+  padding-bottom: 6px;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: opacity 0.2s var(--ease);
+}
+
+.links li:last-child a {
+  border-bottom: 0;
+  color: var(--dark-green-40);
+}
+
+.links a:active { opacity: 0.55; }
+
+/* ── Entrance — the portfolio's grammar: rise + blur resolve ── */
+
+@keyframes card-entrance {
+  from { opacity: 0; transform: translateY(20px); filter: blur(4px); }
+  to   { opacity: 1; transform: translateY(0);    filter: blur(0px); }
+}
+
+.stage, .identity, .details {
+  animation: card-entrance 0.7s var(--ease) both;
+}
+
+.stage    { animation-delay: 0.05s; }
+.identity { animation-delay: 0.15s; }
+.details  { animation-delay: 0.25s; }
+
+/* Sampled critically-damped spring, matching the portfolio's entrance feel. */
+@supports (animation-timing-function: linear(0, 1)) {
+  .stage, .identity, .details {
+    animation-timing-function: linear(
+      0, 0.044, 0.143, 0.263, 0.383, 0.494, 0.592, 0.675, 0.743, 0.799,
+      0.844, 0.88, 0.907, 0.929, 0.946, 0.959, 0.969, 0.976, 0.982, 0.987, 1
+    );
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stage, .identity, .details { animation: none; }
+  .cta__border { animation: none; --cta-angle: 180deg; }
+}
+
+/* ── Wider screens: sit the card in the middle rather than stretching ── */
+
+@media (min-width: 620px) {
+  .card {
+    max-width: 460px;
+    margin: 0 auto;
+  }
+}

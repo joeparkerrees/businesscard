@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<!-- viewport-fit=cover so env(safe-area-inset-*) resolves on iOS and the
+     bottom row clears the home indicator. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#FBFEFC">
+<title>Joe Parker-Rees — Digital Business Card</title>
+<meta name="description" content="Product designer and developer, Brighton UK. Tilt to look around.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Joe Parker-Rees">
+<meta property="og:description" content="Product designer and developer, Brighton UK.">
+<link rel="preload" href="fonts/Octave-Regular.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<main class="card" id="card">
+
+  <header class="meta tracking-ui">
+    <span>Joe Parker-Rees</span>
+    <span class="meta__right">Brighton, UK</span>
+  </header>
+
+  <!-- The 3D stage. The canvas sits behind the controls so the hint and the
+       permission button read over the sculpture. -->
+  <div class="stage" id="stage">
+    <canvas id="head-canvas"></canvas>
+
+    <div class="stage__ui">
+      <p class="hint tracking-ui" id="hint" data-state="idle">Drag to look around</p>
+      <button class="cta" id="motion-btn" hidden>
+        <span class="cta__border" aria-hidden="true"></span>
+        <span class="cta__face tracking-ui">Tilt to look around</span>
+      </button>
+    </div>
+  </div>
+
+  <section class="identity">
+    <h1 class="identity__name">Joe Parker-Rees</h1>
+    <p class="identity__role">Product designer <em>&amp;</em> developer</p>
+  </section>
+
+  <section class="details">
+
+    <div class="qr">
+      <div class="qr__frame">
+        <img class="qr__img" id="qr-img" src="qr-url.svg" alt="QR code linking to this card" width="240" height="240" decoding="async">
+      </div>
+      <div class="qr__switch tracking-ui" role="tablist" aria-label="QR code contents">
+        <button role="tab" id="tab-url" aria-selected="true" data-qr="qr-url.svg" data-label="QR code linking to this card">This card</button>
+        <button role="tab" id="tab-vcard" aria-selected="false" data-qr="qr-vcard.svg" data-label="QR code containing contact details">Contact</button>
+      </div>
+    </div>
+
+    <ul class="links tracking-ui">
+      <li><a href="mailto:joe@joeparkerrees.com">joe@joeparkerrees.com</a></li>
+      <li><a href="https://joeparkerrees.co.uk">joeparkerrees.co.uk</a></li>
+      <li><a href="https://github.com/joeparkerrees">github.com/joeparkerrees</a></li>
+      <li><a href="joe-parker-rees.vcf" download>Save my contact</a></li>
+    </ul>
+
+  </section>
+
+</main>
+
+<script type="module" src="card.js"></script>
+</body>
+</html>
