@@ -14,9 +14,9 @@ import qrcode
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
-# The URL the primary QR points at. Update this if the card moves to a
-# custom domain, then re-run this script.
-CARD_URL = "https://joeparkerrees.github.io/businesscard/"
+# The URL the primary QR points at. Must match the CNAME file at the repo
+# root; re-run this script after changing either.
+CARD_URL = "https://card.joeparkerrees.co.uk/"
 
 # Kept deliberately short: fewer characters means a lower-density QR, which
 # matters because people scan this off a phone screen rather than off paper.

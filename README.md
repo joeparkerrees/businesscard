@@ -4,7 +4,7 @@ A full-bleed, non-scrolling page: a point-cloud sculpture of my face that
 responds to the phone's gyroscope, over the contact details and QR codes
 needed to hand something over at a conference.
 
-**Live:** https://joeparkerrees.github.io/businesscard/
+**Live:** https://card.joeparkerrees.co.uk/
 
 ## Adding the face scan
 
@@ -90,13 +90,30 @@ in any Safari release. The page degrades silently to no haptics.
 Feedback fires on: granting motion access, switching QR, tapping the email,
 and as a detent when the face swings back through front-on.
 
-## Changing the URL
+## Domain
 
-The primary QR points at `CARD_URL` in `scripts/gen-qr.py`. After changing it:
+The card is served from `card.joeparkerrees.co.uk`, which needs three things
+to agree:
+
+1. **`CNAME`** at the repo root, containing `card.joeparkerrees.co.uk`.
+2. **A DNS CNAME record**: `card` → `joeparkerrees.github.io` (a subdomain
+   takes a CNAME; only an apex domain would need A records).
+3. **`CARD_URL`** in `scripts/gen-qr.py`, so the QR points at the same place.
+
+After changing the domain, update all three and regenerate:
 
 ```sh
 python3 scripts/gen-qr.py
 ```
+
+Note that GitHub only issues the TLS certificate *after* DNS resolves, which
+can take anywhere from a few minutes to an hour. Until it does, the domain
+serves over HTTP only — and the gyroscope needs a secure context, so the tilt
+will not work on the custom domain until HTTPS is live. Don't tick "Enforce
+HTTPS" until the certificate has been issued, or the site errors.
+
+The `github.io` URL keeps working with HTTPS throughout, so it's the fallback
+if the certificate isn't ready in time.
 
 ## Local development
 
