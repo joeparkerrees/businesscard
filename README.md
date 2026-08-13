@@ -12,30 +12,44 @@ as a standalone static page in `newportfolio/public/card` alongside the
 existing `public/tools` pages. This repo is the development source; changes
 have to be copied across and committed there to go live.
 
-## Adding the face scan
+## The cube sculpture
 
-The page looks for `models/face.glb` on load. If it isn't there it falls back
-to a procedural head, so the card is never broken — drop the scan in and it
-takes over on the next load. Nothing else needs to change.
+A relief: one cube per cell of a 96×96 grid, each pushed toward the viewer by
+its cell's brightness. Adapted from the p5 sketch that drew a `box()` per pixel
+inside a nested loop — up to 10,000 immediate-mode draw calls a frame, which is
+why that version ran at 24fps and needed Safari-specific tuning. Here it's a
+single `InstancedMesh`: one draw call, with the tilt-driven explosion riding on
+the instance matrices.
+
+The p5 original drove its explosion off mouse distance from centre. On a phone
+the honest equivalent is how far you've tilted, so holding the phone level
+gives a flat relief and tipping it bursts the cubes apart.
+
+### Changing the photo
 
 ```sh
-cp ~/wherever/my-scan.glb models/face.glb
+python3 scripts/gen-relief.py source/portrait.jpg
 ```
 
-The loader normalises whatever it's given: it merges every mesh in the file,
-centres it on the origin, and scales it to a fixed height, so the scan's own
-units and offset don't matter. It then samples the surface by triangle area
-rather than reusing the mesh's vertices — scan meshes are unevenly
-tessellated, so raw vertices clump in high-detail regions and leave flat areas
-bare.
+That bakes `relief.png` — RGB is height, alpha is the subject mask — so the
+page ships no image-processing code and decodes a 96×96 file rather than a
+full-resolution photograph. It also writes `relief-preview.png`, scaled up, so
+the keying can be eyeballed.
 
-Two things it does *not* guess:
+The background is keyed on green dominance (skin, blonde hair and a maroon
+jumper are all red-dominant against a green backdrop), with candidates
+flood-filled inward from the frame edge rather than removed wherever they
+match — keying on colour alone punches holes anywhere the subject happens to be
+greenish or dark, and requiring a connection to the border keeps eye sockets
+and a dark collar intact.
 
-- **Orientation.** If the face loads in sideways or facing away, set
-  `MODEL_ROTATION` at the top of `card.js` (radians).
-- **Draco compression.** The Draco decoder isn't vendored, so export
-  uncompressed. If the file is Draco-compressed the load fails and you get the
-  procedural head with an error in the console.
+**It wants a portrait on a flat green backdrop.** The relief currently ships
+from `joe.webp`, cropped to the head — a stand-in shot against a mint wall and
+a dark doorway, so a few stray cubes survive the key at the right-hand edge.
+A proper green-screen frame keys cleanly and those disappear.
+
+Tuning knobs at the top of the script: `GRID`, `GREEN_MARGIN`, `DARK_CUTOFF`,
+and the `BLACK_POINT` / `WHITE_POINT` contrast range.
 
 ## Why it's built this way
 
@@ -54,14 +68,12 @@ Two things it does *not* guess:
 | --- | --- |
 | `index.html` | Markup, metadata, import map |
 | `styles.css` | Design tokens ported from the portfolio |
-| `card.js` | Point cloud, scan loader, gyroscope, drag fallback, haptics |
-| `models/face.glb` | The scan (absent → procedural fallback) |
+| `card.js` | Cube relief, gyroscope, drag fallback, parallax, haptics |
+| `relief.png` | Baked height + mask data for the sculpture |
 | `scripts/gen-qr.py` | Regenerates both QR codes and the vCard |
-| `vendor/` | three.js and the loaders it needs |
-
-`vendor/` mirrors three's own `examples/jsm` layout — `GLTFLoader` reaches
-sideways for `../utils/BufferGeometryUtils.js`, so `loaders/`, `utils/` and
-`math/` have to stay siblings.
+| `scripts/gen-relief.py` | Bakes relief.png from a portrait |
+| `scripts/sync-to-portfolio.sh` | Copies into newportfolio, rewriting asset paths |
+| `vendor/` | three.js, vendored |
 
 ## The foil badge
 

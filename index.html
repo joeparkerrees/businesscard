@@ -5,11 +5,11 @@
 <!-- viewport-fit=cover so env(safe-area-inset-*) resolves and the sculpture
      genuinely bleeds behind the notch and home indicator. -->
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#FBFEFC">
+<meta name="theme-color" content="#00220A">
 <title>Joe Parker-Rees — Digital Business Card</title>
 <meta name="description" content="Product designer and developer, Brighton UK. Tilt to look around.">
 <meta property="og:type" content="website">
-<meta property="og:url" content="https://card.joeparkerrees.co.uk/">
+<meta property="og:url" content="https://joeparkerrees.co.uk/card">
 <meta property="og:title" content="Joe Parker-Rees">
 <meta property="og:description" content="Product designer and developer, Brighton UK.">
 <link rel="preload" href="fonts/Octave-Regular.woff2" as="font" type="font/woff2" crossorigin>
@@ -28,15 +28,15 @@
 <!-- Full bleed: the sculpture is the page, everything else sits over it. -->
 <canvas id="head-canvas"></canvas>
 
-<!-- Scrims keep the overlaid type legible where it crosses the point cloud,
+<!-- Scrims keep the overlaid type legible where it crosses the relief,
      without boxing the sculpture into a card. -->
 <div class="scrim scrim--top" aria-hidden="true"></div>
 <div class="scrim scrim--bottom" aria-hidden="true"></div>
 
-<main class="overlay">
+<main class="overlay" id="overlay">
 
   <header class="top">
-    <div>
+    <div class="top__id">
       <h1 class="top__name">Joe<br>Parker-Rees</h1>
       <p class="top__place tracking-ui">Brighton, UK</p>
     </div>

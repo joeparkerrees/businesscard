@@ -31,7 +31,7 @@ GRID = 96
 # blonde hair and a maroon jumper are all red-dominant, so green dominance
 # separates subject from ground cleanly without a chroma-key library.
 GREEN_MARGIN = 4      # how much greener than red a pixel must be to count as bg
-DARK_CUTOFF = 46      # near-black pixels at the frame edge are also background
+DARK_CUTOFF = 64      # near-black pixels at the frame edge are also background
 
 # Pull the tonal range out to the full 0–1 span. Photographs rarely use it all,
 # and unused range is lost relief depth.

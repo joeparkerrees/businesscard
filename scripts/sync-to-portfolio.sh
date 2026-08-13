@@ -23,7 +23,7 @@ mkdir -p "$DEST"
 cd "$SRC"
 cp index.html styles.css card.js favicon.svg qr-url.svg qr-vcard.svg "$DEST"/
 cp joe-parker-rees.vcf "$DEST"/
-cp -r vendor models "$DEST"/
+cp -r vendor "$DEST"/
 mkdir -p "$DEST/fonts"
 # Octave only — Romie was dropped from the design, so don't ship it.
 cp fonts/Octave-Regular.woff2 "$DEST/fonts/"
@@ -43,7 +43,6 @@ sed -i "s|url('fonts/|url('/card/fonts/|g" "$DEST/styles.css"
 
 sed -i \
   -e "s|'./vendor/|'/card/vendor/|g" \
-  -e "s|'models/face.glb'|'/card/models/face.glb'|" \
   -e "s|'relief.png'|'/card/relief.png'|" \
   -e "s|'qr-url.svg':|'/card/qr-url.svg':|" \
   -e "s|'qr-vcard.svg':|'/card/qr-vcard.svg':|" \

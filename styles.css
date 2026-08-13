@@ -6,6 +6,11 @@
    dependency, so this stays a static single page that loads fast on
    conference wifi.
 
+   The palette runs inverted against the portfolio: dark green ground, cream
+   type. Iridescence needs somewhere dark to sit — on a near-white page the
+   foil washes out to grey — and the relief's lit cube faces carry far more
+   form against a dark ground.
+
    Octave throughout — no Romie.
    ───────────────────────────────────────────────────────── */
 
@@ -18,12 +23,13 @@
 }
 
 :root {
-  --background: #FBFEFC;
-  --foreground: #00220A;
-  --dark-green-40: rgba(0, 34, 10, 0.4);
-  --dark-green-55: rgba(0, 34, 10, 0.55);
-  --dark-green-10: rgba(0, 34, 10, 0.1);
-  --bento-frame: #EEF3EA;
+  --background: #00220A;
+  --foreground: #FBFEFC;
+  --muted: rgba(251, 254, 252, 0.52);
+  --muted-strong: rgba(251, 254, 252, 0.74);
+  --hairline: rgba(251, 254, 252, 0.16);
+  --panel: rgba(251, 254, 252, 0.1);
+  --badge-base: #001505;
   --radius-card: 4px;
   --ease: cubic-bezier(0.215, 0.61, 0.355, 1);
 }
@@ -44,15 +50,20 @@ html, body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Nothing here scrolls. Fixing the body rather than relying on overflow
-   alone also stops iOS rubber-banding, which reads as broken while someone
-   is tilting the phone. */
+/* Nothing here scrolls. Fixing the body rather than relying on overflow alone
+   also stops iOS rubber-banding, which reads as broken while someone is
+   tilting the phone. */
 body {
   position: fixed;
   inset: 0;
   overflow: hidden;
   overscroll-behavior: none;
   touch-action: none;
+  /* Perspective lives here so the overlay can tilt as one plane and its
+     children can sit at different depths. Origin is above centre, roughly
+     where the sculpture sits, so the tilt pivots around the face. */
+  perspective: 1000px;
+  perspective-origin: 50% 42%;
 }
 
 /* The display tracking (-0.05em) bites at small sizes; loosen for UI text. */
@@ -69,9 +80,8 @@ body {
   z-index: 0;
 }
 
-/* Fade the page colour back in behind the type. The sculpture is dark points
-   on a light ground, and dark text over dark points is unreadable without
-   this — but a hard panel would put the card back in a box. */
+/* Fade the ground back in behind the type. A hard panel would put the card
+   back in a box; this keeps the relief running under the text. */
 .scrim {
   position: fixed;
   left: 0;
@@ -86,9 +96,9 @@ body {
   background: linear-gradient(
     to bottom,
     var(--background) 0%,
-    var(--background) 26%,
-    rgba(251, 254, 252, 0.86) 52%,
-    rgba(251, 254, 252, 0) 100%
+    var(--background) 24%,
+    rgba(0, 34, 10, 0.84) 52%,
+    rgba(0, 34, 10, 0) 100%
   );
 }
 
@@ -99,8 +109,8 @@ body {
     to top,
     var(--background) 0%,
     var(--background) 34%,
-    rgba(251, 254, 252, 0.9) 58%,
-    rgba(251, 254, 252, 0) 100%
+    rgba(0, 34, 10, 0.88) 58%,
+    rgba(0, 34, 10, 0) 100%
   );
 }
 
@@ -121,10 +131,21 @@ body {
   /* The canvas underneath handles drag, so the overlay must not swallow it —
      individual controls opt back in below. */
   pointer-events: none;
+  /* Tilts as one plane; children sit at depth via translateZ. */
+  transform-style: preserve-3d;
+  will-change: transform;
 }
 
 .overlay a,
 .overlay button { pointer-events: auto; }
+
+/* Everything between .overlay and a translateZ'd element has to preserve 3D,
+   or the depths flatten and the parallax disappears. */
+.top,
+.bottom,
+.top__id,
+.handoff,
+.handoff__side { transform-style: preserve-3d; }
 
 /* ── Top ─────────────────────────────────────────────── */
 
@@ -135,6 +156,8 @@ body {
   justify-content: space-between;
   gap: 16px;
 }
+
+.top__id { transform: translateZ(20px); }
 
 .top__name {
   margin: 0;
@@ -147,7 +170,7 @@ body {
 .top__place {
   margin: 8px 0 0;
   font-size: 12px;
-  color: var(--dark-green-55);
+  color: var(--muted-strong);
 }
 
 /* ── Foil badge ──────────────────────────────────────── */
@@ -159,13 +182,14 @@ body {
   height: 74px;
   border-radius: 50%;
   overflow: hidden;
-  /* Dark base: iridescence has nothing to sit on against a near-white page,
-     and washes out to grey if you try. */
-  background: var(--foreground);
-  box-shadow: 0 1px 10px rgba(0, 34, 10, 0.2);
+  /* Dark base, darker than the page: iridescence needs somewhere to sit, and
+     it washes out to grey against anything light. */
+  background: var(--badge-base);
+  box-shadow: 0 2px 14px rgba(0, 0, 0, 0.35);
   /* Contain the blend modes so they compose against the badge's own base
      rather than punching through to the page behind it. */
   isolation: isolate;
+  transform: translateZ(34px);
 }
 
 .badge::after {
@@ -173,7 +197,7 @@ body {
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  border: 1px solid rgba(251, 254, 252, 0.28);
+  border: 1px solid rgba(251, 254, 252, 0.3);
   z-index: 2;
   pointer-events: none;
 }
@@ -192,17 +216,14 @@ body {
   will-change: transform;
 }
 
-/* Black stops rather than transparent ones: under `screen`, black leaves the
-   base untouched, so these are genuine dark gaps rather than a wash. Foil is
-   mostly dark with the iridescence concentrated in bands — colour everywhere
-   at once reads as a rainbow sticker, not as metal. */
 /* One bright stripe, centred, with two faint companions — not a repeating
    band. Repeating it made the period land unpredictably against the badge;
    a single stripe sits dead centre at rest and sweeps cleanly off either
    edge as you tilt, which is what a glint actually does.
 
    Black stops rather than transparent: under `screen`, black leaves the base
-   untouched, so these are genuine dark gaps rather than a wash. */
+   untouched, so these are genuine dark gaps rather than a wash. Colours are
+   the portfolio's CTA gradient. */
 .badge__foil {
   background: linear-gradient(
     72deg,
@@ -256,7 +277,7 @@ body {
   z-index: 1; /* above the blended layers, so it stays readable */
   font-size: 15px;
   letter-spacing: 0.02em;
-  color: var(--background);
+  color: var(--foreground);
 }
 
 /* ── Bottom ──────────────────────────────────────────── */
@@ -274,7 +295,8 @@ body {
   font-size: 14px;
   line-height: 1.34;
   letter-spacing: -0.03em;
-  color: var(--dark-green-55);
+  color: var(--muted-strong);
+  transform: translateZ(6px);
 }
 
 .email {
@@ -284,6 +306,7 @@ body {
   color: var(--foreground);
   text-decoration: none;
   transition: opacity 0.2s var(--ease);
+  transform: translateZ(16px);
 }
 
 .email:active { opacity: 0.55; }
@@ -296,13 +319,17 @@ body {
   gap: 16px;
 }
 
+/* Stays a light panel on the dark ground. Scanners want dark modules on a
+   light field; an inverted QR fails on plenty of readers, and this is the one
+   element that has to work first time. */
 .qr {
   flex: none;
   padding: 9px;
   background: #FFFFFF;
-  border: 1px solid var(--dark-green-10);
   border-radius: var(--radius-card);
   line-height: 0;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.3);
+  transform: translateZ(26px);
 }
 
 .qr__img {
@@ -322,6 +349,7 @@ body {
   align-items: flex-start;
   gap: 8px;
   padding-bottom: 2px;
+  transform: translateZ(14px);
 }
 
 .qr__switch {
@@ -336,8 +364,8 @@ body {
   padding: 7px 6px;
   font: inherit;
   font-size: 11px;
-  color: var(--dark-green-40);
-  background: var(--bento-frame);
+  color: var(--muted-strong);
+  background: var(--panel);
   border: 0;
   border-radius: var(--radius-card);
   cursor: pointer;
@@ -354,7 +382,7 @@ body {
   margin: 0;
   font-size: 11px;
   line-height: 1.3;
-  color: var(--dark-green-40);
+  color: var(--muted);
   transition: opacity 0.4s var(--ease);
 }
 
