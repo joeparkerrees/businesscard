@@ -208,21 +208,20 @@ body {
     72deg,
     #000 0%,
     #000 12%,
-    #4d5a03 16%,
+    #4a4f03 16%,
     #000 21%,
     #000 39%,
-    #cbd608 43%,
-    #00d96f 47%,
-    #23b4da 51%,
-    #d5089f 55%,
+    #f0fe09 43%,
+    #00ff85 48%,
+    #fb0bc6 54%,
     #000 60%,
     #000 79%,
-    #14606f 83%,
+    #4b0339 83%,
     #000 88%,
     #000 100%
   );
   mix-blend-mode: screen;
-  opacity: 0.9;
+  opacity: 0.94;
 }
 
 /* Diffraction grating. The fine pitch is what separates "foil" from "a

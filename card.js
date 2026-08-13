@@ -102,8 +102,10 @@ function updateBadge(rotX, rotY) {
   foil.style.transform = `translate3d(${x * FOIL_TRAVEL}px, ${y * FOIL_TRAVEL}px, 0)`;
   grain.style.transform = `translate3d(${x * GRAIN_TRAVEL}px, ${y * GRAIN_TRAVEL}px, 0)`;
   sheen.style.transform = `translate3d(${x * SHEEN_TRAVEL}px, ${y * SHEEN_TRAVEL}px, 0)`;
-  // Real foil shifts colour with viewing angle; it doesn't only slide.
-  foil.style.filter = `hue-rotate(${x * 46}deg)`;
+  // Real foil shifts colour with viewing angle; it doesn't only slide. Kept
+  // narrow so the stripe stays within the CTA gradient's yellow→green→magenta
+  // range — a wider swing rotates the magenta into cyan, which is off-palette.
+  foil.style.filter = `hue-rotate(${x * 26}deg)`;
 }
 
 // ── Procedural fallback head ─────────────────────────────
