@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<!-- viewport-fit=cover so env(safe-area-inset-*) resolves on iOS and the
-     bottom row clears the home indicator. -->
+<!-- viewport-fit=cover so env(safe-area-inset-*) resolves and the sculpture
+     genuinely bleeds behind the notch and home indicator. -->
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#FBFEFC">
 <title>Joe Parker-Rees — Digital Business Card</title>
@@ -14,57 +14,70 @@
 <link rel="preload" href="fonts/Octave-Regular.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="styles.css">
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three.module.min.js"
+  }
+}
+</script>
 </head>
 <body>
 
-<main class="card" id="card">
+<!-- Full bleed: the sculpture is the page, everything else sits over it. -->
+<canvas id="head-canvas"></canvas>
 
-  <header class="meta tracking-ui">
-    <span>Joe Parker-Rees</span>
-    <span class="meta__right">Brighton, UK</span>
+<!-- Scrims keep the overlaid type legible where it crosses the point cloud,
+     without boxing the sculpture into a card. -->
+<div class="scrim scrim--top" aria-hidden="true"></div>
+<div class="scrim scrim--bottom" aria-hidden="true"></div>
+
+<main class="overlay">
+
+  <header class="top">
+    <p class="top__name">Joe Parker-Rees</p>
+    <p class="top__place tracking-ui">Brighton, UK</p>
   </header>
 
-  <!-- The 3D stage. The canvas sits behind the controls so the hint and the
-       permission button read over the sculpture. -->
-  <div class="stage" id="stage">
-    <canvas id="head-canvas"></canvas>
+  <div class="bottom">
 
-    <div class="stage__ui">
-      <p class="hint tracking-ui" id="hint" data-state="idle">Drag to look around</p>
-      <button class="cta" id="motion-btn" hidden>
-        <span class="cta__border" aria-hidden="true"></span>
-        <span class="cta__face tracking-ui">Tilt to look around</span>
-      </button>
+    <p class="bio">
+      Digital designer and developer. I design products and then build them —
+      a native iOS app, brand systems, and the occasional water shader.
+    </p>
+
+    <a class="email" href="mailto:joe@joeparkerrees.com">joe@joeparkerrees.com</a>
+
+    <div class="handoff">
+      <div class="qr">
+        <img class="qr__img" id="qr-img" src="qr-url.svg" alt="QR code linking to this card" width="300" height="300" decoding="async">
+      </div>
+
+      <div class="handoff__side">
+        <div class="qr__switch tracking-ui" role="tablist" aria-label="QR code contents">
+          <button role="tab" id="tab-url" aria-selected="true" data-qr="qr-url.svg" data-label="QR code linking to this card">This card</button>
+          <button role="tab" id="tab-vcard" aria-selected="false" data-qr="qr-vcard.svg" data-label="QR code containing contact details">Save contact</button>
+        </div>
+        <p class="handoff__hint tracking-ui" id="qr-caption">Scan to open this card</p>
+        <button class="cta" id="motion-btn" hidden>
+          <span class="cta__border" aria-hidden="true"></span>
+          <span class="cta__face tracking-ui">Tilt to look around</span>
+        </button>
+        <p class="hint tracking-ui" id="hint">Drag to look around</p>
+      </div>
     </div>
+
   </div>
 
-  <section class="identity">
-    <h1 class="identity__name">Joe Parker-Rees</h1>
-    <p class="identity__role">Product designer <em>&amp;</em> developer</p>
-  </section>
-
-  <section class="details">
-
-    <div class="qr">
-      <div class="qr__frame">
-        <img class="qr__img" id="qr-img" src="qr-url.svg" alt="QR code linking to this card" width="240" height="240" decoding="async">
-      </div>
-      <div class="qr__switch tracking-ui" role="tablist" aria-label="QR code contents">
-        <button role="tab" id="tab-url" aria-selected="true" data-qr="qr-url.svg" data-label="QR code linking to this card">This card</button>
-        <button role="tab" id="tab-vcard" aria-selected="false" data-qr="qr-vcard.svg" data-label="QR code containing contact details">Contact</button>
-      </div>
-    </div>
-
-    <ul class="links tracking-ui">
-      <li><a href="mailto:joe@joeparkerrees.com">joe@joeparkerrees.com</a></li>
-      <li><a href="https://joeparkerrees.co.uk">joeparkerrees.co.uk</a></li>
-      <li><a href="https://github.com/joeparkerrees">github.com/joeparkerrees</a></li>
-      <li><a href="joe-parker-rees.vcf" download>Save my contact</a></li>
-    </ul>
-
-  </section>
-
 </main>
+
+<!--
+  iOS Safari does not implement navigator.vibrate. The only lever available to
+  a web page is this: toggling a `switch` checkbox produces system haptic
+  feedback on iOS 17.4+. It is a workaround, not an API, so it is kept
+  offscreen and driven programmatically. Android uses navigator.vibrate.
+-->
+<input type="checkbox" switch id="haptic-switch" class="haptic-switch" aria-hidden="true" tabindex="-1">
 
 <script type="module" src="card.js"></script>
 </body>

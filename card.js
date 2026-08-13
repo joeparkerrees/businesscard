@@ -1,48 +1,83 @@
 // ─────────────────────────────────────────────────────────
 // Joe Parker-Rees — digital business card
 //
-// A point-cloud head that responds to the phone's gyroscope, with a
-// drag fallback for everything the gyroscope isn't available on.
+// A full-bleed point-cloud head that responds to the phone's gyroscope, with
+// a drag fallback everywhere the gyroscope isn't available.
 //
-// The head is currently procedural (see buildHeadGeometry). Swapping in a
-// real scan means replacing that one function with something that returns a
-// BufferGeometry of positions — nothing else here needs to change.
+// The sculpture loads from models/face.glb. If that file isn't there, it
+// falls back to a procedural head so the page is never broken — drop the
+// scan in and it takes over on the next load.
 // ─────────────────────────────────────────────────────────
 
-import * as THREE from './vendor/three.module.min.js';
+import * as THREE from 'three';
+// vendor/ mirrors three's own examples/jsm layout — GLTFLoader reaches
+// sideways for '../utils/BufferGeometryUtils.js', so the folders have to stay
+// siblings.
+import { GLTFLoader } from './vendor/loaders/GLTFLoader.js';
+import { MeshSurfaceSampler } from './vendor/math/MeshSurfaceSampler.js';
+import * as BufferGeometryUtils from './vendor/utils/BufferGeometryUtils.js';
 
 const canvas = document.getElementById('head-canvas');
-const stage = document.getElementById('stage');
 const hint = document.getElementById('hint');
 const motionBtn = document.getElementById('motion-btn');
+const hapticSwitch = document.getElementById('haptic-switch');
 
 const FOREGROUND = 0x00220a;
+// Dense enough that the near surface reads as a solid form rather than a grey
+// wash — at full-bleed size, a sparse cloud just looks like paper texture.
+// Points are cheap; this is not the bottleneck.
+const POINT_COUNT = 120000;
 
-// Tilting the phone should feel like moving around a fixed object rather than
-// turning a turntable. If it reads backwards on device, flip this to 1.
+// Nominal model dimensions, in world units. The loaded scan is normalised to
+// these so the framing maths below holds whatever the scan's own scale is.
+const HEAD_W = 1.44;
+const HEAD_H = 2.06;
+
+// Tilting should feel like moving around a fixed object rather than turning a
+// turntable. If it reads backwards on device, flip these.
 const GAMMA_SIGN = -1;
 const BETA_SIGN = -1;
 
+// If the scan loads in facing the wrong way, adjust these (radians).
+const MODEL_ROTATION = { x: 0, y: 0, z: 0 };
+
 const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-// ── Geometry ─────────────────────────────────────────────
+// ── Haptics ──────────────────────────────────────────────
+
+let lastHaptic = 0;
+
+/**
+ * Fire a short haptic tick.
+ *
+ * Android and desktop Chrome implement navigator.vibrate. iOS Safari does
+ * not, and offers no haptics API at all — the only lever a web page has is
+ * that toggling a `switch` checkbox produces system haptic feedback on
+ * iOS 17.4+. That's a workaround riding on a UI control, not an API, so it
+ * may stop working; the page degrades silently to no haptics if it does.
+ */
+function haptic(ms = 10) {
+  const now = performance.now();
+  if (now - lastHaptic < 60) return; // never machine-gun
+  lastHaptic = now;
+
+  if (typeof navigator.vibrate === 'function') {
+    navigator.vibrate(ms);
+    return;
+  }
+  hapticSwitch?.click();
+}
+
+// ── Procedural fallback head ─────────────────────────────
 
 const gaussian = (v, mu, sigma) => Math.exp(-((v - mu) ** 2) / (2 * sigma * sigma));
 
-/**
- * Deform a point on the unit sphere into a head-ish silhouette.
- *
- * This is a placeholder standing in for a real scan, but it's deliberately
- * built as a displacement of an evenly-sampled sphere — the same shape the
- * scan data will take — so the render path is the one we'll actually ship.
- */
+/** Deform a point on the unit sphere into a head-ish silhouette. */
 function shapeHead(x, y, z) {
-  // Base ellipsoid: taller than wide, a little deeper than wide.
   let px = x * 0.72;
   let py = y * 1.0;
   let pz = z * 0.8;
 
-  // Taper the cranium into a jaw below the equator, and lengthen the chin.
   if (y < 0) {
     const t = Math.pow(-y, 1.5);
     const taper = 1 - 0.45 * t;
@@ -51,33 +86,24 @@ function shapeHead(x, y, z) {
     py -= 0.06 * t;
   }
 
-  // Flatten the crown so the top doesn't read as a ball.
   if (y > 0.75) py -= (y - 0.75) * 0.35;
 
   const front = Math.max(0, z);
   const back = Math.max(0, -z);
 
-  // Flatten the face plane so features sit on something rather than bulge.
   pz -= front * front * 0.14;
-  // ...and extend the back of the skull for a human profile.
   pz -= back * back * 0.1;
 
-  // Nose: bump on the centreline. Kept soft and wide — a tighter gaussian
-  // reads as a thorn stuck to the surface rather than as a feature.
   pz += gaussian(x, 0, 0.2) * gaussian(y, -0.04, 0.26) * front * 0.17;
-  // Brow: broader and shallower, sitting above it.
   pz += gaussian(x, 0, 0.34) * gaussian(y, 0.26, 0.1) * front * 0.07;
-  // Eye sockets: paired dents either side of the nose.
   const socket = (gaussian(x, 0.26, 0.12) + gaussian(x, -0.26, 0.12)) * gaussian(y, 0.1, 0.11);
   pz -= socket * front * 0.09;
 
   return [px, py, pz];
 }
 
-function buildHeadGeometry(count = 16000) {
+function buildProceduralHead(count = POINT_COUNT) {
   const positions = new Float32Array(count * 3);
-  // Fibonacci sphere: even coverage without the pole clustering you get from
-  // naive lat/long sampling.
   const golden = Math.PI * (3 - Math.sqrt(5));
 
   for (let i = 0; i < count; i++) {
@@ -86,12 +112,64 @@ function buildHeadGeometry(count = 16000) {
     const theta = golden * i;
     const [px, py, pz] = shapeHead(Math.cos(theta) * radius, y, Math.sin(theta) * radius);
 
-    // A little jitter off the surface so the cloud reads as organic rather
-    // than as a mathematically perfect shell.
     const j = 0.012;
     positions[i * 3] = px + (Math.random() - 0.5) * j;
     positions[i * 3 + 1] = py + (Math.random() - 0.5) * j;
     positions[i * 3 + 2] = pz + (Math.random() - 0.5) * j;
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  return geometry;
+}
+
+// ── Real scan ────────────────────────────────────────────
+
+/**
+ * Load models/face.glb and sample its surface into an even point cloud.
+ *
+ * Sampling by triangle area rather than reusing the mesh's own vertices
+ * matters: scan meshes are unevenly tessellated, so raw vertices clump in
+ * high-detail regions and leave flat areas bare.
+ */
+async function loadScanGeometry() {
+  const gltf = await new GLTFLoader().loadAsync('models/face.glb');
+
+  const geometries = [];
+  gltf.scene.updateMatrixWorld(true);
+  gltf.scene.traverse((child) => {
+    if (!child.isMesh || !child.geometry?.attributes?.position) return;
+    // Strip to positions only so meshes with differing attribute sets still
+    // merge, and bake the node transform in since we're discarding the tree.
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', child.geometry.attributes.position.clone());
+    if (child.geometry.index) g.setIndex(child.geometry.index.clone());
+    g.applyMatrix4(child.matrixWorld);
+    geometries.push(g.toNonIndexed());
+  });
+
+  if (!geometries.length) throw new Error('face.glb contains no meshes');
+
+  const merged =
+    geometries.length === 1 ? geometries[0] : BufferGeometryUtils.mergeGeometries(geometries);
+
+  // Normalise: centre on the origin and scale to the nominal head height, so
+  // the framing maths doesn't depend on how the scan was exported.
+  merged.computeBoundingBox();
+  const box = merged.boundingBox;
+  const size = box.getSize(new THREE.Vector3());
+  const centre = box.getCenter(new THREE.Vector3());
+  merged.translate(-centre.x, -centre.y, -centre.z);
+  merged.scale(HEAD_H / size.y, HEAD_H / size.y, HEAD_H / size.y);
+
+  const sampler = new MeshSurfaceSampler(new THREE.Mesh(merged)).build();
+  const positions = new Float32Array(POINT_COUNT * 3);
+  const p = new THREE.Vector3();
+  for (let i = 0; i < POINT_COUNT; i++) {
+    sampler.sample(p);
+    positions[i * 3] = p.x;
+    positions[i * 3 + 1] = p.y;
+    positions[i * 3 + 2] = p.z;
   }
 
   const geometry = new THREE.BufferGeometry();
@@ -107,9 +185,9 @@ function buildHeadGeometry(count = 16000) {
 const material = new THREE.ShaderMaterial({
   uniforms: {
     uColor: { value: new THREE.Color(FOREGROUND) },
-    // World units, not pixels — the vertex shader converts to device pixels
-    // via uScale, which tracks the drawing-buffer height.
-    uSize: { value: 0.025 },
+    // World units, not pixels — the shader converts to device pixels via
+    // uScale, which tracks the drawing-buffer height.
+    uSize: { value: 0.028 },
     uScale: { value: 300 },
     uNear: { value: 4.0 },
     uFar: { value: 6.1 },
@@ -138,7 +216,10 @@ const material = new THREE.ShaderMaterial({
       float d = dot(c, c);
       if (d > 0.25) discard;
       float edge = smoothstep(0.25, 0.14, d);
-      gl_FragColor = vec4(uColor, edge * mix(0.10, 0.95, vFade));
+      // Steep falloff: the back of the skull should nearly vanish so the
+      // front surface reads cleanly instead of showing through itself.
+      float depthWeight = pow(vFade, 2.2);
+      gl_FragColor = vec4(uColor, edge * mix(0.04, 1.0, depthWeight));
     }
   `,
   transparent: true,
@@ -154,30 +235,61 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(35, 1, 0.1, 100);
 camera.position.z = 5.0;
 
-const head = new THREE.Points(buildHeadGeometry(24000), material);
+const head = new THREE.Points(buildProceduralHead(), material);
+head.rotation.set(MODEL_ROTATION.x, MODEL_ROTATION.y, MODEL_ROTATION.z);
 scene.add(head);
 
+// Base rotation the tilt is applied on top of, so a scan that needs
+// reorienting doesn't fight the interaction.
+const baseRotation = { x: MODEL_ROTATION.x, y: MODEL_ROTATION.y };
+
 function resize() {
-  const w = stage.clientWidth;
-  const h = stage.clientHeight;
+  const w = window.innerWidth;
+  const h = window.innerHeight;
   if (!w || !h) return;
-  const dpr = Math.min(window.devicePixelRatio || 1, 2); // capped: this runs in someone's hand for hours
+
+  const dpr = Math.min(window.devicePixelRatio || 1, 2); // capped: this sits in a hand for hours
   renderer.setPixelRatio(dpr);
   renderer.setSize(w, h, false);
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
+
   // gl_PointSize is in device pixels, so this tracks the drawing buffer
   // rather than the CSS box — otherwise points halve on a 2x screen.
   material.uniforms.uScale.value = h * dpr * 0.5;
+
+  // Full bleed: fill the width on a phone (so the sculpture runs off both
+  // edges) but fall back to fitting by height on wide screens, where filling
+  // the width would blow the head up to nothing but a cheek.
+  const visibleH = 2 * camera.position.z * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+  const visibleW = visibleH * camera.aspect;
+  head.scale.setScalar(Math.min((visibleH * 0.82) / HEAD_H, (visibleW * 1.08) / HEAD_W));
+
+  // Sit the sculpture high: it crops off the top edge (which is what makes it
+  // read as full bleed) and leaves the lower third clear for the type.
+  head.position.y = visibleH * 0.22;
 }
 
-new ResizeObserver(resize).observe(stage);
+window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', resize);
 resize();
+
+// Swap in the scan once it's decoded. Failure is expected and fine — it just
+// means the file isn't there yet.
+loadScanGeometry()
+  .then((geometry) => {
+    head.geometry.dispose();
+    head.geometry = geometry;
+    resize();
+  })
+  .catch(() => {
+    console.info('[card] models/face.glb not loaded — using the procedural head.');
+  });
 
 // ── Input ────────────────────────────────────────────────
 
 const tilt = { targetX: 0, targetY: 0, x: 0, y: 0 };
-let engaged = false; // true once the user has tilted or dragged
+let engaged = false;
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
@@ -196,8 +308,8 @@ function onOrientation(e) {
   if (e.beta === null || e.gamma === null) return;
   sawOrientationEvent = true;
 
-  // Baseline off the first reading so the head doesn't snap to whatever
-  // angle the phone happened to be held at.
+  // Baseline off the first reading so the head doesn't snap to whatever angle
+  // the phone happened to be held at.
   if (!baseline) baseline = { beta: e.beta, gamma: e.gamma };
 
   tilt.targetY = clamp(GAMMA_SIGN * (e.gamma - baseline.gamma) * 0.024, -1.1, 1.1);
@@ -208,8 +320,8 @@ function onOrientation(e) {
 function startOrientation() {
   window.addEventListener('deviceorientation', onOrientation);
   // Some browsers accept the listener and then never fire it. If nothing
-  // arrives, leave the drag fallback in place rather than showing a
-  // sculpture that ignores the phone.
+  // arrives, leave the drag fallback in place rather than showing a sculpture
+  // that ignores the phone.
   setTimeout(() => {
     if (!sawOrientationEvent) {
       window.removeEventListener('deviceorientation', onOrientation);
@@ -230,8 +342,12 @@ if (needsPermission) {
   motionBtn.addEventListener('click', async () => {
     try {
       const result = await DeviceOrientationEvent.requestPermission();
-      if (result === 'granted') startOrientation();
-      else hint.textContent = 'Drag to look around';
+      if (result === 'granted') {
+        haptic(18);
+        startOrientation();
+      } else {
+        hint.textContent = 'Drag to look around';
+      }
     } catch {
       hint.textContent = 'Drag to look around';
     }
@@ -274,9 +390,9 @@ canvas.addEventListener('pointercancel', endDrag);
 
 let idleAmount = 1; // 1 = fully idle sway, 0 = fully user-driven
 let running = true;
+let wasFacing = true;
 const clock = new THREE.Clock();
 
-// Pause when the page is hidden — this sits open in someone's hand all day.
 document.addEventListener('visibilitychange', () => {
   running = !document.hidden;
   if (running) {
@@ -299,8 +415,14 @@ function frame() {
   tilt.x += (tilt.targetX - tilt.x) * 0.08;
   tilt.y += (tilt.targetY - tilt.y) * 0.08;
 
-  head.rotation.y = tilt.y + sway;
-  head.rotation.x = tilt.x + nod;
+  head.rotation.y = baseRotation.y + tilt.y + sway;
+  head.rotation.x = baseRotation.x + tilt.x + nod;
+
+  // A detent as the face swings back through front-on, so the sculpture feels
+  // like it has a resting position rather than being weightless.
+  const facing = Math.abs(tilt.y) < 0.05;
+  if (engaged && facing && !wasFacing) haptic(8);
+  wasFacing = facing;
 
   renderer.render(scene, camera);
 }
@@ -310,12 +432,22 @@ frame();
 // ── QR switch ────────────────────────────────────────────
 
 const qrImg = document.getElementById('qr-img');
+const qrCaption = document.getElementById('qr-caption');
 const tabs = [...document.querySelectorAll('.qr__switch button')];
+
+const CAPTIONS = {
+  'qr-url.svg': 'Scan to open this card',
+  'qr-vcard.svg': 'Scan to save my details — works with no signal',
+};
 
 tabs.forEach((tab) => {
   tab.addEventListener('click', () => {
     tabs.forEach((t) => t.setAttribute('aria-selected', String(t === tab)));
     qrImg.src = tab.dataset.qr;
     qrImg.alt = tab.dataset.label;
+    qrCaption.textContent = CAPTIONS[tab.dataset.qr] ?? '';
+    haptic(10);
   });
 });
+
+document.querySelector('.email')?.addEventListener('click', () => haptic(10));

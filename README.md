@@ -1,49 +1,75 @@
 # Digital business card
 
-A single static page: a point-cloud head that responds to the phone's
-gyroscope, plus the contact details and QR codes needed to hand something over
-at a conference.
+A full-bleed, non-scrolling page: a point-cloud sculpture of my face that
+responds to the phone's gyroscope, over the contact details and QR codes
+needed to hand something over at a conference.
 
 **Live:** https://joeparkerrees.github.io/businesscard/
 
+## Adding the face scan
+
+The page looks for `models/face.glb` on load. If it isn't there it falls back
+to a procedural head, so the card is never broken — drop the scan in and it
+takes over on the next load. Nothing else needs to change.
+
+```sh
+cp ~/wherever/my-scan.glb models/face.glb
+```
+
+The loader normalises whatever it's given: it merges every mesh in the file,
+centres it on the origin, and scales it to a fixed height, so the scan's own
+units and offset don't matter. It then samples the surface by triangle area
+rather than reusing the mesh's vertices — scan meshes are unevenly
+tessellated, so raw vertices clump in high-detail regions and leave flat areas
+bare.
+
+Two things it does *not* guess:
+
+- **Orientation.** If the face loads in sideways or facing away, set
+  `MODEL_ROTATION` at the top of `card.js` (radians).
+- **Draco compression.** The Draco decoder isn't vendored, so export
+  uncompressed. If the file is Draco-compressed the load fails and you get the
+  procedural head with an error in the console.
+
 ## Why it's built this way
 
-- **Static, no framework.** The page has to load on conference wifi. Everything
-  is vendored locally, including three.js — a CDN request is one more thing
-  that can fail in a room with 2000 people on one access point.
+- **Static, no framework.** The page has to load on conference wifi.
+  Everything is vendored locally, including three.js — a CDN request is one
+  more thing that can fail in a room with 2000 people on one access point.
 - **Design tokens are hand-ported** from the `newportfolio` design system
   rather than imported, so this stays a flat static site instead of pulling in
-  Next.js and Sanity.
-- **QR codes are baked at build time** into SVG, so no QR library ships to the
-  browser.
-- **Fonts are subsetted to woff2** (105KB → 7.9KB, 173KB → 11.1KB).
+  Next.js and Sanity. Octave throughout.
+- **QR codes are baked at build time** into SVG, so no QR library ships.
+- **Fonts are subsetted to woff2** (105KB → 7.9KB).
 
 ## Structure
 
 | File | Purpose |
 | --- | --- |
-| `index.html` | Markup and metadata |
+| `index.html` | Markup, metadata, import map |
 | `styles.css` | Design tokens ported from the portfolio |
-| `card.js` | Point cloud, gyroscope handling, drag fallback |
+| `card.js` | Point cloud, scan loader, gyroscope, drag fallback, haptics |
+| `models/face.glb` | The scan (absent → procedural fallback) |
 | `scripts/gen-qr.py` | Regenerates both QR codes and the vCard |
-| `vendor/` | three.js, vendored |
+| `vendor/` | three.js and the loaders it needs |
 
-## Swapping in a real face
+`vendor/` mirrors three's own `examples/jsm` layout — `GLTFLoader` reaches
+sideways for `../utils/BufferGeometryUtils.js`, so `loaders/`, `utils/` and
+`math/` have to stay siblings.
 
-The head is currently procedural — an evenly-sampled sphere displaced into a
-head-ish silhouette by `shapeHead()` in `card.js`. It is deliberately built as
-a point cloud so that the render path is the one a real scan will use.
+## Haptics
 
-To replace it, change `buildHeadGeometry()` to return a `BufferGeometry` of
-positions from the scan. Nothing else needs to change. Roughly:
+Android and desktop Chrome get real feedback through `navigator.vibrate`.
 
-1. Scan with Polycam / RealityScan / Scaniverse, export GLB.
-2. Sample points off the mesh surface, or load the GLB's own vertices.
-3. Normalise so the head is about 2 units tall and centred on the origin, with
-   +Z facing the camera.
+**iOS Safari does not implement `navigator.vibrate` and has no haptics API.**
+The only lever a web page has is that toggling an `<input type="checkbox"
+switch>` produces system haptic feedback on iOS 17.4+, so that's what the
+offscreen `#haptic-switch` is for. It rides on a UI control rather than an
+API, it may not fire outside a direct user gesture, and it could stop working
+in any Safari release. The page degrades silently to no haptics.
 
-Keep the point count in the region of 20–30k; the shader fades points by depth,
-which is what gives the cloud its volume on a light background.
+Feedback fires on: granting motion access, switching QR, tapping the email,
+and as a detent when the face swings back through front-on.
 
 ## Changing the URL
 
@@ -61,9 +87,8 @@ The gyroscope needs a secure context, so `file://` will not work. Serve it:
 python3 -m http.server 8000
 ```
 
-Then open `http://localhost:8000`. Note that `localhost` counts as secure, but
-testing the gyroscope from another device on your network needs real HTTPS —
-easiest is to push and test against the deployed URL.
+`localhost` counts as secure, but testing the gyroscope from another device on
+your network needs real HTTPS — easiest is to push and test the deployed URL.
 
 ## Gyroscope notes
 
