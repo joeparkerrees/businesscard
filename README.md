@@ -4,7 +4,13 @@ A full-bleed, non-scrolling page: a point-cloud sculpture of my face that
 responds to the phone's gyroscope, over the contact details and QR codes
 needed to hand something over at a conference.
 
-**Live:** https://card.joeparkerrees.co.uk/
+**Live:** https://joeparkerrees.co.uk/card
+
+**Deployed from `newportfolio`, not from here.** A path on `joeparkerrees.co.uk`
+has to be served by the Vercel deploy that owns the domain, so the card ships
+as a standalone static page in `newportfolio/public/card` alongside the
+existing `public/tools` pages. This repo is the development source; changes
+have to be copied across and committed there to go live.
 
 ## Adding the face scan
 
@@ -90,30 +96,37 @@ in any Safari release. The page degrades silently to no haptics.
 Feedback fires on: granting motion access, switching QR, tapping the email,
 and as a detent when the face swings back through front-on.
 
-## Domain
+## Deploying
 
-The card is served from `card.joeparkerrees.co.uk`, which needs three things
-to agree:
+The card lives at `newportfolio/public/card`. To ship a change, copy the files
+across and commit them there:
 
-1. **`CNAME`** at the repo root, containing `card.joeparkerrees.co.uk`.
-2. **A DNS CNAME record**: `card` → `joeparkerrees.github.io` (a subdomain
-   takes a CNAME; only an apex domain would need A records).
-3. **`CARD_URL`** in `scripts/gen-qr.py`, so the QR points at the same place.
+```sh
+D=../newportfolio/public/card
+cp index.html styles.css card.js favicon.svg qr-*.svg *.vcf "$D"/
+cp -r vendor fonts models "$D"/
+```
 
-After changing the domain, update all three and regenerate:
+Then rewrite the asset paths to absolute, because they differ between the two
+locations — see below.
+
+### Absolute paths
+
+In `newportfolio` every asset reference is `/card/…` rather than relative.
+This matters: at `/card` with no trailing slash, a relative URL resolves
+against the domain root and every asset 404s. `next.config.ts` serves
+`index.html` for both `/card` and `/card/` via a rewrite rather than
+redirecting to the trailing-slash form, which would fight Next's own
+trailing-slash normalisation and can loop.
+
+### The URL
+
+`CARD_URL` in `scripts/gen-qr.py` must match where the card is actually
+served. After changing it:
 
 ```sh
 python3 scripts/gen-qr.py
 ```
-
-Note that GitHub only issues the TLS certificate *after* DNS resolves, which
-can take anywhere from a few minutes to an hour. Until it does, the domain
-serves over HTTP only — and the gyroscope needs a secure context, so the tilt
-will not work on the custom domain until HTTPS is live. Don't tick "Enforce
-HTTPS" until the certificate has been issued, or the site errors.
-
-The `github.io` URL keeps working with HTTPS throughout, so it's the fallback
-if the certificate isn't ready in time.
 
 ## Local development
 

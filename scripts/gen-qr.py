@@ -14,9 +14,10 @@ import qrcode
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
-# The URL the primary QR points at. Must match the CNAME file at the repo
-# root; re-run this script after changing either.
-CARD_URL = "https://card.joeparkerrees.co.uk/"
+# The URL the primary QR points at. The card is served from the portfolio's
+# Vercel deploy at /card, so this must match the rewrite in newportfolio's
+# next.config.ts. Re-run this script after changing it.
+CARD_URL = "https://joeparkerrees.co.uk/card"
 
 # Kept deliberately short: fewer characters means a lower-density QR, which
 # matters because people scan this off a phone screen rather than off paper.
