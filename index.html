@@ -35,8 +35,20 @@
 <main class="overlay">
 
   <header class="top">
-    <p class="top__name">Joe Parker-Rees</p>
-    <p class="top__place tracking-ui">Brighton, UK</p>
+    <div>
+      <h1 class="top__name">Joe<br>Parker-Rees</h1>
+      <p class="top__place tracking-ui">Brighton, UK</p>
+    </div>
+
+    <!-- Foil seal. The glint is driven by the same tilt values as the
+         sculpture, so the two read as one physical object rather than as two
+         effects that happen to share a screen. -->
+    <div class="badge" id="badge">
+      <span class="badge__foil" aria-hidden="true"></span>
+      <span class="badge__grain" aria-hidden="true"></span>
+      <span class="badge__sheen" aria-hidden="true"></span>
+      <span class="badge__label tracking-ui">JPR</span>
+    </div>
   </header>
 
   <div class="bottom">

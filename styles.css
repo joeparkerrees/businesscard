@@ -82,11 +82,12 @@ body {
 
 .scrim--top {
   top: 0;
-  height: 24svh;
+  height: 30svh;
   background: linear-gradient(
     to bottom,
     var(--background) 0%,
-    rgba(251, 254, 252, 0.92) 38%,
+    var(--background) 26%,
+    rgba(251, 254, 252, 0.86) 52%,
     rgba(251, 254, 252, 0) 100%
   );
 }
@@ -127,19 +128,136 @@ body {
 
 /* ── Top ─────────────────────────────────────────────── */
 
-.top { flex: none; }
+.top {
+  flex: none;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
 
 .top__name {
   margin: 0;
   font-size: clamp(30px, 9vw, 44px);
-  line-height: 0.98;
+  font-weight: 400;
+  line-height: 0.94;
   letter-spacing: -0.05em;
 }
 
 .top__place {
-  margin: 6px 0 0;
+  margin: 8px 0 0;
   font-size: 12px;
-  color: var(--dark-green-40);
+  color: var(--dark-green-55);
+}
+
+/* ── Foil badge ──────────────────────────────────────── */
+
+.badge {
+  position: relative;
+  flex: none;
+  width: 74px;
+  height: 74px;
+  border-radius: 50%;
+  overflow: hidden;
+  /* Dark base: iridescence has nothing to sit on against a near-white page,
+     and washes out to grey if you try. */
+  background: var(--foreground);
+  box-shadow: 0 1px 10px rgba(0, 34, 10, 0.2);
+  /* Contain the blend modes so they compose against the badge's own base
+     rather than punching through to the page behind it. */
+  isolation: isolate;
+}
+
+.badge::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 1px solid rgba(251, 254, 252, 0.28);
+  z-index: 2;
+  pointer-events: none;
+}
+
+/* Each layer is oversized and moved by transform rather than by
+   background-position — transforms stay on the compositor, whereas
+   background-position repaints the whole gradient every frame. */
+.badge__foil,
+.badge__grain,
+.badge__sheen {
+  position: absolute;
+  left: -80%;
+  top: -80%;
+  width: 260%;
+  height: 260%;
+  will-change: transform;
+}
+
+/* Black stops rather than transparent ones: under `screen`, black leaves the
+   base untouched, so these are genuine dark gaps rather than a wash. Foil is
+   mostly dark with the iridescence concentrated in bands — colour everywhere
+   at once reads as a rainbow sticker, not as metal. */
+/* One bright stripe, centred, with two faint companions — not a repeating
+   band. Repeating it made the period land unpredictably against the badge;
+   a single stripe sits dead centre at rest and sweeps cleanly off either
+   edge as you tilt, which is what a glint actually does.
+
+   Black stops rather than transparent: under `screen`, black leaves the base
+   untouched, so these are genuine dark gaps rather than a wash. */
+.badge__foil {
+  background: linear-gradient(
+    72deg,
+    #000 0%,
+    #000 12%,
+    #4d5a03 16%,
+    #000 21%,
+    #000 39%,
+    #cbd608 43%,
+    #00d96f 47%,
+    #23b4da 51%,
+    #d5089f 55%,
+    #000 60%,
+    #000 79%,
+    #14606f 83%,
+    #000 88%,
+    #000 100%
+  );
+  mix-blend-mode: screen;
+  opacity: 0.9;
+}
+
+/* Diffraction grating. The fine pitch is what separates "foil" from "a
+   gradient" — it runs across the colour bands, not with them. */
+.badge__grain {
+  background: repeating-linear-gradient(
+    162deg,
+    rgba(255, 255, 255, 0.22) 0 1px,
+    rgba(255, 255, 255, 0) 1px 4px
+  );
+  mix-blend-mode: soft-light;
+}
+
+/* A tight specular hotspot. Narrow enough to read as a highlight catching the
+   surface rather than as an overall brightening. */
+.badge__sheen {
+  background: radial-gradient(
+    circle at 50% 50%,
+    rgba(255, 255, 255, 0.95) 0%,
+    rgba(255, 255, 255, 0.42) 9%,
+    rgba(255, 255, 255, 0.1) 18%,
+    rgba(255, 255, 255, 0) 30%
+  );
+  mix-blend-mode: soft-light;
+}
+
+.badge__label {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  z-index: 1; /* above the blended layers, so it stays readable */
+  font-size: 15px;
+  letter-spacing: 0.02em;
+  color: var(--background);
 }
 
 /* ── Bottom ──────────────────────────────────────────── */

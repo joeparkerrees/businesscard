@@ -57,6 +57,25 @@ Two things it does *not* guess:
 sideways for `../utils/BufferGeometryUtils.js`, so `loaders/`, `utils/` and
 `math/` have to stay siblings.
 
+## The foil badge
+
+The seal top-right is a holographic foil effect driven by the *same* tilt
+values as the sculpture, so the two read as one physical object rather than as
+two effects sharing a screen.
+
+Three oversized layers sit on a dark base and are moved by `transform` rather
+than `background-position` — transforms stay on the compositor, whereas
+background-position repaints the gradient every frame. Each layer travels at a
+different rate; the parallax between the colour bands, the diffraction grating
+and the specular hotspot is most of what sells it as foil.
+
+The colour is a *single* stripe with two faint companions, not a repeating
+band. Repeating it made the period land unpredictably against the badge, so
+the whole disc read as a rainbow sticker; one stripe sits centred at rest and
+sweeps cleanly off either edge as you tilt. The dark gaps are black stops
+rather than transparent ones — under `screen`, black leaves the base
+untouched.
+
 ## Haptics
 
 Android and desktop Chrome get real feedback through `navigator.vibrate`.

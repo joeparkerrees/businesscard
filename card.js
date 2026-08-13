@@ -22,6 +22,11 @@ const hint = document.getElementById('hint');
 const motionBtn = document.getElementById('motion-btn');
 const hapticSwitch = document.getElementById('haptic-switch');
 
+const badge = document.getElementById('badge');
+const foil = badge?.querySelector('.badge__foil');
+const grain = badge?.querySelector('.badge__grain');
+const sheen = badge?.querySelector('.badge__sheen');
+
 const FOREGROUND = 0x00220a;
 // Dense enough that the near surface reads as a solid form rather than a grey
 // wash — at full-bleed size, a sparse cloud just looks like paper texture.
@@ -66,6 +71,39 @@ function haptic(ms = 10) {
     return;
   }
   hapticSwitch?.click();
+}
+
+// ── Foil badge ───────────────────────────────────────────
+//
+// Driven by the same tilt values as the sculpture, so the seal and the head
+// read as one physical object rather than two effects sharing a screen.
+
+// Travel in px per radian. Each layer moves at a different rate: the parallax
+// between the colour bands, the grating and the specular is most of what
+// sells this as foil rather than as a sliding gradient.
+const FOIL_TRAVEL = 40;
+const GRAIN_TRAVEL = 62;
+const SHEEN_TRAVEL = 86;
+
+let lastGlint = NaN;
+
+function updateBadge(rotX, rotY) {
+  if (!foil) return;
+
+  // Negative: a reflection slides opposite to the way you tip the object.
+  const x = -rotY;
+  const y = -rotX;
+
+  // The hue filter forces a repaint, so skip frames that wouldn't show a
+  // visible change — matters when idle, and when reduced motion holds it still.
+  if (Math.abs(x - lastGlint) < 0.0015) return;
+  lastGlint = x;
+
+  foil.style.transform = `translate3d(${x * FOIL_TRAVEL}px, ${y * FOIL_TRAVEL}px, 0)`;
+  grain.style.transform = `translate3d(${x * GRAIN_TRAVEL}px, ${y * GRAIN_TRAVEL}px, 0)`;
+  sheen.style.transform = `translate3d(${x * SHEEN_TRAVEL}px, ${y * SHEEN_TRAVEL}px, 0)`;
+  // Real foil shifts colour with viewing angle; it doesn't only slide.
+  foil.style.filter = `hue-rotate(${x * 46}deg)`;
 }
 
 // ── Procedural fallback head ─────────────────────────────
@@ -415,8 +453,13 @@ function frame() {
   tilt.x += (tilt.targetX - tilt.x) * 0.08;
   tilt.y += (tilt.targetY - tilt.y) * 0.08;
 
-  head.rotation.y = baseRotation.y + tilt.y + sway;
-  head.rotation.x = baseRotation.x + tilt.x + nod;
+  const rotY = tilt.y + sway;
+  const rotX = tilt.x + nod;
+
+  head.rotation.y = baseRotation.y + rotY;
+  head.rotation.x = baseRotation.x + rotX;
+
+  updateBadge(rotX, rotY);
 
   // A detent as the face swings back through front-on, so the sculpture feels
   // like it has a resting position rather than being weightless.
