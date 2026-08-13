@@ -29,7 +29,13 @@ mkdir -p "$DEST/fonts"
 cp fonts/Octave-Regular.woff2 "$DEST/fonts/"
 [ -f relief.png ] && cp relief.png "$DEST"/ || true
 
-sed -i \
+# Use sed in a cross-platform way (macOS vs GNU)
+SED_I=(sed -i)
+if [[ "$OSTYPE" == "darwin"* ]]; then
+  SED_I=(sed -i '')
+fi
+
+"${SED_I[@]}" \
   -e 's|href="fonts/|href="/card/fonts/|g' \
   -e 's|href="favicon.svg"|href="/card/favicon.svg"|' \
   -e 's|href="styles.css"|href="/card/styles.css"|' \
@@ -39,21 +45,29 @@ sed -i \
   -e 's|src="card.js"|src="/card/card.js"|' \
   "$DEST/index.html"
 
-sed -i "s|url('fonts/|url('/card/fonts/|g" "$DEST/styles.css"
+"${SED_I[@]}" "s|url('fonts/|url('/card/fonts/|g" "$DEST/styles.css"
 
-sed -i \
+"${SED_I[@]}" \
   -e "s|'./vendor/|'/card/vendor/|g" \
   -e "s|'relief.png'|'/card/relief.png'|" \
   -e "s|'qr-url.svg':|'/card/qr-url.svg':|" \
   -e "s|'qr-vcard.svg':|'/card/qr-vcard.svg':|" \
   "$DEST/card.js"
 
-# Fail loudly rather than shipping a page whose assets 404 in production.
-if grep -qP '(href|src)="(?!/card|mailto:|https?:|data:)' "$DEST/index.html"; then
-  echo "Relative asset reference survived the rewrite in index.html:" >&2
-  grep -nP '(href|src)="(?!/card|mailto:|https?:|data:)' "$DEST/index.html" >&2
+# Verify relative asset references are rewritten
+if python3 -c '
+import sys, re
+content = open(sys.argv[1]).read()
+unrewritten = re.findall(r"(?:href|src)=\"(?!/card|mailto:|https?:|data:)[^\"]+\"", content)
+if unrewritten:
+    print("Relative asset references found:", unrewritten)
+    sys.exit(1)
+' "$DEST/index.html"; then
+  :
+else
   exit 1
 fi
 
 echo "Synced to $DEST"
 find "$DEST" -type f | sed "s|$DEST/||" | sort
+

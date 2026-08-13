@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "esbuild panel.jsx --bundle --format=esm --outfile=panel.js --loader:.js=jsx --define:process.env.NODE_ENV='\"development\"'",
+    "build": "esbuild panel.jsx --bundle --format=esm --outfile=panel.js --loader:.js=jsx --jsx=automatic --define:process.env.NODE_ENV='\"development\"'",
     "dev": "node server.js"
   },
   "dependencies": {

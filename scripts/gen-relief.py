@@ -34,11 +34,8 @@ GRID = 128
 # separates subject from ground without a chroma-key library.
 GREEN_MARGIN = 4
 
-# Dark pixels connected to the frame edge count as background too. Set above
-# the jumper (which reads rgb(36,27,23)) and below the darkest part of the
-# face, so the crop comes out as a head rather than a head on a torso — the
-# jumper is a flat dark mass that adds no relief and swamps the framing.
-DARK_CUTOFF = 50
+# Dark pixels connected to the frame edge count as background too.
+DARK_CUTOFF = 20
 
 # Framing. The subject is auto-cropped to its own bounding box plus this much
 # padding (as a fraction of the longer side), then squared — so the relief is
@@ -52,8 +49,12 @@ BLACK_PCT = 2.0
 WHITE_PCT = 98.0
 
 
-def is_background(r: int, g: int, b: int) -> bool:
+def is_background(r: int, g: int, b: int, a: int = 255) -> bool:
+    if a < 128:
+        return True
     if g > r + GREEN_MARGIN and g > b + GREEN_MARGIN:
+        return True
+    if r > 240 and g > 240 and b > 240:
         return True
     return max(r, g, b) < DARK_CUTOFF
 
@@ -99,7 +100,7 @@ def subject_box(im: Image.Image, probe: int = 192) -> tuple[int, int, int, int]:
     subject's aspect instead and every cube lands on him.
     """
     small = im.resize((probe, probe), Image.BOX)
-    bg = despeckle(flood_background(list(small.getdata()), probe, probe), probe, probe)
+    bg = despeckle(flood_background(list(small.get_flattened_data() if hasattr(small, "get_flattened_data") else small.getdata()), probe, probe), probe, probe)
 
     xs = sorted(i % probe for i, is_bg in enumerate(bg) if not is_bg)
     ys = sorted(i // probe for i, is_bg in enumerate(bg) if not is_bg)
@@ -154,7 +155,7 @@ def main() -> None:
     if not src.exists():
         sys.exit(f"No source image at {src}")
 
-    full = Image.open(src).convert("RGB")
+    full = Image.open(src).convert("RGBA")
     box = subject_box(full)
     print(f"source {full.width}x{full.height} → subject box {box}")
 

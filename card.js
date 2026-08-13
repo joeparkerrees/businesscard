@@ -18,15 +18,10 @@ import * as THREE from 'three';
 
 const canvas = document.getElementById('head-canvas');
 const hint = document.getElementById('hint');
-const motionBtn = document.getElementById('motion-btn');
 const hapticSwitch = document.getElementById('haptic-switch');
 const cardEl = document.getElementById('card');
 const sculptWindow = document.getElementById('sculpt-window');
-
-const badge = document.getElementById('badge');
-const foil = badge?.querySelector('.badge__foil');
-const grain = badge?.querySelector('.badge__grain');
-const sheen = badge?.querySelector('.badge__sheen');
+const shineEl = document.getElementById('card-shine');
 
 const CUBE_COLOR = 0x00220a;
 const SCULPT_WIDTH = 2.35; // world units across the full grid
@@ -42,7 +37,7 @@ export const params = {
   baseDepth: 0.34,
   explodeDepth: 1.15,
   explodeSensitivity: 0.85,
-  explodeDamping: 0.07,
+  explodeDamping: 0.22,
   // Cube size as a fraction of cell size: min, plus this much more at full
   // brightness. The size difference keeps the relief legible head-on.
   cubeMin: 0.55,
@@ -55,21 +50,16 @@ export const params = {
   damping: 0.08,
   gammaScale: 0.024,
   betaScale: 0.014,
-  sway: 0.32,
-  breath: 0.3,
-  breathRate: 0.62,
+  sway: 0.08,
+  breath: 0.67,
+  breathRate: 0.57,
   // Lighting.
   ambient: 0.85,
   keyLight: 3.1,
   // Overlay parallax, in degrees at full deflection.
-  overlayTilt: 7,
-  // Foil badge. foilSpin is degrees of colour-wheel rotation per radian of
-  // tilt; the others are layer travel in px per radian.
-  foilSpin: 130,
-  foilPeriod: 6, // seconds per full turn, matching .cta-border
-
-  grainTravel: 62,
-  sheenTravel: 86,
+  overlayTilt: 13,
+  // Specular sheen opacity
+  shineOpacity: 0.55,
 };
 
 if (typeof window !== 'undefined') window.CARD_PARAMS = params;
@@ -105,36 +95,6 @@ function haptic(ms = 10) {
     return;
   }
   hapticSwitch?.click();
-}
-
-// ── Foil badge ───────────────────────────────────────────
-//
-// Driven by the same tilt values as the sculpture, so the seal and the relief
-// read as one physical object rather than two effects sharing a screen.
-
-// Each layer moves at a different rate: the parallax between the colour
-// bands, the grating and the specular is most of what sells this as foil
-// rather than as a sliding gradient.
-
-let lastGlint = NaN;
-
-function updateBadge(rotX, rotY, time) {
-  if (!foil) return;
-
-  // Negative: a reflection slides opposite to the way you tip the object.
-  const x = -rotY;
-  const y = -rotX;
-
-  // The wheel turns on its own as well as with tilt, matching .cta-border on
-  // the site, which spins continuously at 6s. Tilt offsets that sweep rather
-  // than being the only thing driving it.
-  const drift = reduceMotion ? 0 : (time * 360) / params.foilPeriod;
-  foil.style.setProperty('--foil-angle', `${drift + x * params.foilSpin}deg`);
-
-  if (Math.abs(x - lastGlint) < 0.0008) return;
-  lastGlint = x;
-  grain.style.transform = `translate3d(${x * params.grainTravel}px, ${y * params.grainTravel}px, 0)`;
-  sheen.style.transform = `translate3d(${x * params.sheenTravel}px, ${y * params.sheenTravel}px, 0)`;
 }
 
 // ── Relief data ──────────────────────────────────────────
@@ -316,32 +276,25 @@ function startOrientation() {
   }, 1500);
 }
 
-const needsPermission =
-  typeof DeviceOrientationEvent !== 'undefined' &&
-  typeof DeviceOrientationEvent.requestPermission === 'function';
-
-if (needsPermission) {
-  // iOS 13+: requestPermission() only works from inside a user gesture, so it
-  // has to hang off a tap rather than fire on load.
-  motionBtn.hidden = false;
-  hint.hidden = true;
-  motionBtn.addEventListener('click', async () => {
-    try {
-      const result = await DeviceOrientationEvent.requestPermission();
-      if (result === 'granted') {
-        haptic(18);
-        startOrientation();
-      } else {
-        hint.textContent = 'Drag to look around';
+if (typeof DeviceOrientationEvent !== 'undefined') {
+  if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+    // iOS 13+: requestPermission() requires a user gesture. On first touch, request permission.
+    let permissionRequested = false;
+    cardEl?.addEventListener('pointerdown', async () => {
+      if (permissionRequested) return;
+      permissionRequested = true;
+      try {
+        const result = await DeviceOrientationEvent.requestPermission();
+        if (result === 'granted') {
+          startOrientation();
+        }
+      } catch {
+        // Fallback to drag
       }
-    } catch {
-      hint.textContent = 'Drag to look around';
-    }
-    motionBtn.hidden = true;
-    hint.hidden = false;
-  });
-} else if (typeof DeviceOrientationEvent !== 'undefined') {
-  startOrientation();
+    }, { once: true });
+  } else {
+    startOrientation();
+  }
 }
 
 // Drag ------------------------------------------------------
@@ -350,6 +303,7 @@ let dragging = false;
 let last = { x: 0, y: 0 };
 
 cardEl.addEventListener('pointerdown', (e) => {
+  if (e.target.closest('button, a, input')) return;
   dragging = true;
   last = { x: e.clientX, y: e.clientY };
   cardEl.setPointerCapture(e.pointerId);
@@ -383,6 +337,20 @@ function updateCard(rotX, rotY) {
   const ry = clamp(rotY * params.overlayTilt, -14, 14);
   const rx = clamp(-rotX * params.overlayTilt, -12, 12);
   cardEl.style.transform = `rotateX(${rx}deg) rotateY(${ry}deg)`;
+
+  if (shineEl) {
+    // Reflection moves as the card tilts (rotY shifts horizontal, rotX shifts vertical)
+    const shineX = clamp(50 + rotY * 65, 5, 95);
+    const shineY = clamp(50 - rotX * 65, 5, 95);
+    const shineAngle = 135 + rotY * 30 + rotX * 30;
+
+    shineEl.style.setProperty('--shine-x', `${shineX}%`);
+    shineEl.style.setProperty('--shine-y', `${shineY}%`);
+    shineEl.style.setProperty('--shine-angle', `${shineAngle}deg`);
+    if (params.shineOpacity !== undefined) {
+      shineEl.style.setProperty('--shine-opacity', `${params.shineOpacity}`);
+    }
+  }
 }
 
 // ── Loop ─────────────────────────────────────────────────
@@ -447,7 +415,6 @@ function frame() {
     appliedExplosion = explosion;
   }
 
-  updateBadge(rotX, rotY, t);
   updateCard(rotX, rotY);
 
   // A detent as the face swings back through front-on, so the sculpture feels

@@ -6,7 +6,7 @@
 // that mounts alongside the card and mutates window.CARD_PARAMS. Nothing
 // here is part of the production page.
 
-import { useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import { DialRoot, useDialKit } from 'dialkit';
 
@@ -47,17 +47,18 @@ function Motion() {
   const p = useDialKit('Motion', {
     // How hard you have to tilt before the relief fully bursts apart.
     explodeSensitivity: [0.85, 0.1, 2.5, 0.01],
-    explodeDamping: [0.07, 0.01, 0.5, 0.01],
+    explodeDamping: [0.22, 0.01, 0.5, 0.01],
     damping: [0.08, 0.01, 0.5, 0.01],
-    sway: [0.32, 0, 1.2, 0.01],
-    breath: [0.3, 0, 1.2, 0.01],
-    breathRate: [0.62, 0.05, 3, 0.01],
+    sway: [0.08, 0, 1.2, 0.01],
+    breath: [0.67, 0, 1.2, 0.01],
+    breathRate: [0.57, 0.05, 3, 0.01],
     Gyroscope: {
       _collapsed: true,
       gammaScale: [0.024, 0.002, 0.08, 0.001],
       betaScale: [0.014, 0.002, 0.08, 0.001],
     },
-    overlayTilt: [7, 0, 20, 0.5],
+    overlayTilt: [13, 0, 20, 0.5],
+    shineOpacity: [0.55, 0, 1, 0.05],
   });
   useApply(p);
   return null;
@@ -79,8 +80,7 @@ function Panel() {
     <>
       <Sculpture />
       <Motion />
-      <Badge />
-      <DialRoot />
+      <DialRoot productionEnabled={true} defaultOpen={true} position="top-right" />
     </>
   );
 }
