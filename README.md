@@ -1,8 +1,8 @@
 # Digital business card
 
-A full-bleed, non-scrolling page: a point-cloud sculpture of my face that
-responds to the phone's gyroscope, over the contact details and QR codes
-needed to hand something over at a conference.
+A full-bleed, non-scrolling page: a cube relief of my face that responds to
+the phone's gyroscope, over the contact details and QR codes needed to hand
+something over at a conference.
 
 **Live:** https://joeparkerrees.co.uk/card
 
@@ -110,17 +110,15 @@ and as a detent when the face swings back through front-on.
 
 ## Deploying
 
-The card lives at `newportfolio/public/card`. To ship a change, copy the files
-across and commit them there:
+The card lives at `newportfolio/public/card`. One command syncs it:
 
 ```sh
-D=../newportfolio/public/card
-cp index.html styles.css card.js favicon.svg qr-*.svg *.vcf "$D"/
-cp -r vendor fonts models "$D"/
+scripts/sync-to-portfolio.sh [path-to-newportfolio]
 ```
 
-Then rewrite the asset paths to absolute, because they differ between the two
-locations — see below.
+Then commit and push in the portfolio repo. The script also rewrites the asset
+paths, which differ between the two locations — see below — and fails loudly
+rather than shipping a page whose assets 404 in production.
 
 ### Absolute paths
 
