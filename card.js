@@ -20,14 +20,15 @@ const canvas = document.getElementById('head-canvas');
 const hint = document.getElementById('hint');
 const motionBtn = document.getElementById('motion-btn');
 const hapticSwitch = document.getElementById('haptic-switch');
-const overlay = document.getElementById('overlay');
+const cardEl = document.getElementById('card');
+const sculptWindow = document.getElementById('sculpt-window');
 
 const badge = document.getElementById('badge');
 const foil = badge?.querySelector('.badge__foil');
 const grain = badge?.querySelector('.badge__grain');
 const sheen = badge?.querySelector('.badge__sheen');
 
-const CUBE_COLOR = 0xfbfefc;
+const CUBE_COLOR = 0x00220a;
 const SCULPT_WIDTH = 2.35; // world units across the full grid
 
 // Every tunable in one object so the dev panel can drive them live. The
@@ -47,33 +48,37 @@ export const params = {
   cubeMin: 0.55,
   cubeRange: 0.5,
   // Framing, as fractions of the visible frustum.
-  fitHeight: 0.72,
-  fitWidth: 0.92,
-  posY: 0.2,
+  fitHeight: 0.94,
+  fitWidth: 0.86,
+  posY: 0.02,
   // Input.
   damping: 0.08,
   gammaScale: 0.024,
   betaScale: 0.014,
   sway: 0.32,
-  idleBreath: 0.16,
+  breath: 0.3,
+  breathRate: 0.62,
   // Lighting.
-  ambient: 1.35,
-  keyLight: 2.1,
+  ambient: 0.85,
+  keyLight: 3.1,
   // Overlay parallax, in degrees at full deflection.
   overlayTilt: 7,
-  // Foil badge travel, px per radian.
-  foilTravel: 40,
+  // Foil badge. foilSpin is degrees of colour-wheel rotation per radian of
+  // tilt; the others are layer travel in px per radian.
+  foilSpin: 130,
+  foilPeriod: 6, // seconds per full turn, matching .cta-border
+
   grainTravel: 62,
   sheenTravel: 86,
-  hueRange: 26,
 };
 
 if (typeof window !== 'undefined') window.CARD_PARAMS = params;
 
-// Tilting should feel like moving around a fixed object rather than turning a
-// turntable. If it reads backwards on device, flip these.
-const GAMMA_SIGN = -1;
-const BETA_SIGN = -1;
+// The sculpture leans against the phone's rotation rather than with it, which
+// is what makes it read as sitting in the card rather than painted on it.
+// Flip these to swap the direction.
+const GAMMA_SIGN = 1;
+const BETA_SIGN = 1;
 
 const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -113,25 +118,23 @@ function haptic(ms = 10) {
 
 let lastGlint = NaN;
 
-function updateBadge(rotX, rotY) {
+function updateBadge(rotX, rotY, time) {
   if (!foil) return;
 
   // Negative: a reflection slides opposite to the way you tip the object.
   const x = -rotY;
   const y = -rotX;
 
-  // The hue filter forces a repaint, so skip frames that wouldn't show a
-  // visible change — matters when idle, and when reduced motion holds it still.
+  // The wheel turns on its own as well as with tilt, matching .cta-border on
+  // the site, which spins continuously at 6s. Tilt offsets that sweep rather
+  // than being the only thing driving it.
+  const drift = reduceMotion ? 0 : (time * 360) / params.foilPeriod;
+  foil.style.setProperty('--foil-angle', `${drift + x * params.foilSpin}deg`);
+
   if (Math.abs(x - lastGlint) < 0.0008) return;
   lastGlint = x;
-
-  foil.style.transform = `translate3d(${x * params.foilTravel}px, ${y * params.foilTravel}px, 0)`;
   grain.style.transform = `translate3d(${x * params.grainTravel}px, ${y * params.grainTravel}px, 0)`;
   sheen.style.transform = `translate3d(${x * params.sheenTravel}px, ${y * params.sheenTravel}px, 0)`;
-  // Real foil shifts colour with viewing angle; it doesn't only slide. Kept
-  // narrow so the stripe stays within the CTA gradient's yellow→green→magenta
-  // range — a wider swing rotates the magenta into cyan, which is off-palette.
-  foil.style.filter = `hue-rotate(${x * params.hueRange}deg)`;
 }
 
 // ── Relief data ──────────────────────────────────────────
@@ -174,9 +177,10 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(35, 1, 0.1, 100);
 camera.position.z = 5.0;
 
-// Cubes need shading to read as cubes; on a dark ground a flat fill just
-// becomes a silhouette. Key from the upper left, generous ambient so the
-// unlit faces don't crush to black.
+// Cubes need shading to read as cubes rather than as a flat silhouette. Dark
+// green on light stock has little tonal room, so the key is strong and the
+// ambient low: the difference between a lit and an unlit face is the only
+// thing carrying the relief.
 const ambientLight = new THREE.AmbientLight(0xffffff, params.ambient);
 scene.add(ambientLight);
 const key = new THREE.DirectionalLight(0xffffff, params.keyLight);
@@ -236,8 +240,10 @@ function applyExplosion(amount) {
 }
 
 function resize() {
-  const w = window.innerWidth;
-  const h = window.innerHeight;
+  // Sized to the window element, not the viewport: the relief lives in a
+  // recess in the card now, not behind the whole page.
+  const w = sculptWindow.clientWidth;
+  const h = sculptWindow.clientHeight;
   if (!w || !h) return;
 
   const dpr = Math.min(window.devicePixelRatio || 1, 2); // capped: this sits in a hand for hours
@@ -246,21 +252,16 @@ function resize() {
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
 
-  // Full bleed: fill the width on a phone so the relief runs off both edges,
-  // but fall back to fitting by height on wide screens, where filling the
-  // width would blow it up to nothing but a cheek.
   const visibleH = 2 * camera.position.z * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
   const visibleW = visibleH * camera.aspect;
   if (sculptW) {
     sculpture.scale.setScalar(Math.min((visibleH * params.fitHeight) / sculptH, (visibleW * params.fitWidth) / sculptW));
   }
 
-  // Sit it high: it crops off the top edge, which is what makes it read as
-  // full bleed, and leaves the lower third clear for the type.
   sculpture.position.y = visibleH * params.posY;
 }
 
-window.addEventListener('resize', resize);
+new ResizeObserver(resize).observe(sculptWindow);
 window.addEventListener('orientationchange', resize);
 resize();
 
@@ -348,13 +349,13 @@ if (needsPermission) {
 let dragging = false;
 let last = { x: 0, y: 0 };
 
-canvas.addEventListener('pointerdown', (e) => {
+cardEl.addEventListener('pointerdown', (e) => {
   dragging = true;
   last = { x: e.clientX, y: e.clientY };
-  canvas.setPointerCapture(e.pointerId);
+  cardEl.setPointerCapture(e.pointerId);
 });
 
-canvas.addEventListener('pointermove', (e) => {
+cardEl.addEventListener('pointermove', (e) => {
   if (!dragging) return;
   tilt.targetY = clamp(tilt.targetY + (e.clientX - last.x) * 0.008, -1.4, 1.4);
   tilt.targetX = clamp(tilt.targetX + (e.clientY - last.y) * 0.005, -0.5, 0.5);
@@ -364,31 +365,24 @@ canvas.addEventListener('pointermove', (e) => {
 
 const endDrag = (e) => {
   dragging = false;
-  if (e.pointerId !== undefined && canvas.hasPointerCapture?.(e.pointerId)) {
-    canvas.releasePointerCapture(e.pointerId);
+  if (e.pointerId !== undefined && cardEl.hasPointerCapture?.(e.pointerId)) {
+    cardEl.releasePointerCapture(e.pointerId);
   }
 };
-canvas.addEventListener('pointerup', endDrag);
-canvas.addEventListener('pointercancel', endDrag);
+cardEl.addEventListener('pointerup', endDrag);
+cardEl.addEventListener('pointercancel', endDrag);
 
-// ── Overlay parallax ─────────────────────────────────────
+// ── Card tilt ────────────────────────────────────────────
 //
-// The page tilts as one plane, with its children at different depths (set in
+// The card tilts as one plane, with its contents at different depths (set in
 // CSS via translateZ). Small angles: this is a card catching the light, not a
 // carousel.
 
-function updateOverlay(rotX, rotY) {
-  if (!overlay || reduceMotion) return;
-  const ry = clamp(rotY * params.overlayTilt, -12, 12);
-  const rx = clamp(-rotX * params.overlayTilt, -10, 10);
-  overlay.style.transform = `rotateX(${rx}deg) rotateY(${ry}deg)`;
-}
-
-// The entrance animation ends on filter: blur(0), and any filter value
-// flattens preserve-3d — which would kill the parallax above. Drop the
-// animation once it has played so the 3D context survives.
-for (const el of document.querySelectorAll('.top, .bottom')) {
-  el.addEventListener('animationend', () => { el.style.animation = 'none'; }, { once: true });
+function updateCard(rotX, rotY) {
+  if (!cardEl || reduceMotion) return;
+  const ry = clamp(rotY * params.overlayTilt, -14, 14);
+  const rx = clamp(-rotX * params.overlayTilt, -12, 12);
+  cardEl.style.transform = `rotateX(${rx}deg) rotateY(${ry}deg)`;
 }
 
 // ── Loop ─────────────────────────────────────────────────
@@ -436,7 +430,9 @@ function frame() {
 
   // How far you've tilted is how far it bursts apart. Idle keeps a slow
   // breath in it so the relief is never completely inert.
-  const breath = reduceMotion ? 0 : (0.5 + 0.5 * Math.sin(t * 0.6)) * params.idleBreath * idleAmount;
+  // Always breathing, not only while idle — a still relief reads as a flat
+  // image, and this is the cue that it has depth and responds.
+  const breath = reduceMotion ? 0 : (0.5 + 0.5 * Math.sin(t * params.breathRate)) * params.breath;
   const target = Math.min(1, Math.hypot(tilt.x, tilt.y) / params.explodeSensitivity) + breath;
   explosion += (target - explosion) * params.explodeDamping;
 
@@ -451,8 +447,8 @@ function frame() {
     appliedExplosion = explosion;
   }
 
-  updateBadge(rotX, rotY);
-  updateOverlay(rotX, rotY);
+  updateBadge(rotX, rotY, t);
+  updateCard(rotX, rotY);
 
   // A detent as the face swings back through front-on, so the sculpture feels
   // like it has a resting position rather than being weightless.
@@ -469,16 +465,18 @@ frame();
 
 const qrImg = document.getElementById('qr-img');
 const qrCaption = document.getElementById('qr-caption');
-const tabs = [...document.querySelectorAll('.qr__switch button')];
+const switchEl = document.getElementById('qr-switch');
+const tabs = [...document.querySelectorAll('.switch button')];
 
 const CAPTIONS = {
   'qr-url.svg': 'Scan to open this card',
   'qr-vcard.svg': 'Scan to save my details — works with no signal',
 };
 
-tabs.forEach((tab) => {
+tabs.forEach((tab, index) => {
   tab.addEventListener('click', () => {
     tabs.forEach((t) => t.setAttribute('aria-selected', String(t === tab)));
+    switchEl.dataset.active = String(index);
     qrImg.src = tab.dataset.qr;
     qrImg.alt = tab.dataset.label;
     qrCaption.textContent = CAPTIONS[tab.dataset.qr] ?? '';

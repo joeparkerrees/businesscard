@@ -35,8 +35,8 @@ function Sculpture() {
     },
     Lighting: {
       _collapsed: true,
-      ambient: [1.35, 0, 4, 0.05],
-      keyLight: [2.1, 0, 6, 0.05],
+      ambient: [0.85, 0, 4, 0.05],
+      keyLight: [3.1, 0, 8, 0.05],
     },
   });
   useApply(p);
@@ -50,7 +50,8 @@ function Motion() {
     explodeDamping: [0.07, 0.01, 0.5, 0.01],
     damping: [0.08, 0.01, 0.5, 0.01],
     sway: [0.32, 0, 1.2, 0.01],
-    idleBreath: [0.16, 0, 1, 0.01],
+    breath: [0.3, 0, 1.2, 0.01],
+    breathRate: [0.62, 0.05, 3, 0.01],
     Gyroscope: {
       _collapsed: true,
       gammaScale: [0.024, 0.002, 0.08, 0.001],
@@ -64,10 +65,10 @@ function Motion() {
 
 function Badge() {
   const p = useDialKit('Foil badge', {
-    foilTravel: [40, 0, 200, 1],
+    foilSpin: [130, 0, 720, 5],
+    foilPeriod: [6, 1, 30, 0.5],
     grainTravel: [62, 0, 200, 1],
     sheenTravel: [86, 0, 260, 1],
-    hueRange: [26, 0, 180, 1],
   });
   useApply(p);
   return null;

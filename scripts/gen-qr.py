@@ -34,6 +34,7 @@ VCARD = "\r\n".join([
 ])
 
 DARK = "#00220A"
+QUIET = "#F3F8F0"
 
 
 def to_svg(data: str, quiet: int = 2) -> str:
@@ -64,7 +65,7 @@ def to_svg(data: str, quiet: int = 2) -> str:
     return (
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {size} {size}" '
         f'shape-rendering="crispEdges" role="img">'
-        f'<rect width="{size}" height="{size}" fill="#FFFFFF"/>'
+        f'<rect width="{size}" height="{size}" fill="{QUIET}"/>'
         f'<g fill="{DARK}">{"".join(rects)}</g>'
         f"</svg>"
     )
