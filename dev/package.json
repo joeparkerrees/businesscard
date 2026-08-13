@@ -1,0 +1,16 @@
+{
+  "name": "card-dev",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "esbuild panel.jsx --bundle --format=esm --outfile=panel.js --loader:.js=jsx --define:process.env.NODE_ENV='\"development\"'",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "dialkit": "^1.4.3",
+    "esbuild": "^0.28.2",
+    "motion": "^13.1.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  }
+}

@@ -12,7 +12,7 @@ tiny RGBA PNG:
 Usage:
     python3 scripts/gen-relief.py [source-image]
 
-Defaults to source/portrait.jpg. Re-run it after swapping the photo.
+Defaults to source/portrait.webp. Re-run it after swapping the photo.
 """
 
 import pathlib
@@ -22,36 +22,43 @@ from collections import deque
 from PIL import Image, ImageOps
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
+DEFAULT_SRC = ROOT / "source" / "portrait.webp"
 
-# Grid resolution. Every filled cell becomes a cube, so this squares fast:
-# 96 gives up to ~9k cubes before masking, which is comfortable on a phone.
-GRID = 96
+# Longest grid dimension. The short side follows the subject's aspect, so a
+# tall head gets a tall grid rather than a square one padded with background.
+# Every filled cell becomes a cube; 96 keeps the count comfortable on a phone.
+GRID = 128
 
 # Background keying. The portrait is shot on a flat green backdrop, and skin,
-# blonde hair and a maroon jumper are all red-dominant, so green dominance
-# separates subject from ground cleanly without a chroma-key library.
-GREEN_MARGIN = 4      # how much greener than red a pixel must be to count as bg
-DARK_CUTOFF = 64      # near-black pixels at the frame edge are also background
+# blonde hair and a dark red jumper are all red-dominant, so green dominance
+# separates subject from ground without a chroma-key library.
+GREEN_MARGIN = 4
 
-# Pull the tonal range out to the full 0–1 span. Photographs rarely use it all,
-# and unused range is lost relief depth.
-BLACK_POINT = 0.10
-WHITE_POINT = 0.94
+# Dark pixels connected to the frame edge count as background too. Set above
+# the jumper (which reads rgb(36,27,23)) and below the darkest part of the
+# face, so the crop comes out as a head rather than a head on a torso — the
+# jumper is a flat dark mass that adds no relief and swamps the framing.
+DARK_CUTOFF = 50
+
+# Framing. The subject is auto-cropped to its own bounding box plus this much
+# padding (as a fraction of the longer side), then squared — so the relief is
+# framed on the person rather than on however the photo happened to be shot.
+PAD = 0.10
+
+# Contrast. Black and white points are taken from percentiles of the subject's
+# own luminance rather than fixed values: a photograph rarely uses the full
+# range, and unused range is lost relief depth.
+BLACK_PCT = 2.0
+WHITE_PCT = 98.0
 
 
-def load_square(path: pathlib.Path) -> Image.Image:
-    """Load and centre-crop to a square, then downsample to the grid."""
-    im = Image.open(path).convert("RGB")
-    side = min(im.size)
-    left = (im.width - side) // 2
-    top = (im.height - side) // 2
-    im = im.crop((left, top, left + side, top + side))
-    # BOX averages the source pixels falling into each cell, which is what we
-    # want — each cube should represent its whole cell, not one sampled pixel.
-    return im.resize((GRID, GRID), Image.BOX)
+def is_background(r: int, g: int, b: int) -> bool:
+    if g > r + GREEN_MARGIN and g > b + GREEN_MARGIN:
+        return True
+    return max(r, g, b) < DARK_CUTOFF
 
 
-def background_mask(px: list[tuple[int, int, int]]) -> list[bool]:
+def flood_background(px, w: int, h: int) -> list[bool]:
     """True where the pixel is background.
 
     Keying on colour alone punches holes anywhere the subject happens to be
@@ -59,89 +66,134 @@ def background_mask(px: list[tuple[int, int, int]]) -> list[bool]:
     instead: only background that actually connects to the border is removed,
     and an eye socket or a dark collar in the middle of the subject survives.
     """
-    def is_candidate(i: int) -> bool:
-        r, g, b = px[i]
-        if g > r + GREEN_MARGIN and g > b + GREEN_MARGIN:
-            return True
-        return max(r, g, b) < DARK_CUTOFF
-
-    bg = [False] * (GRID * GRID)
+    bg = [False] * (w * h)
     queue = deque()
 
-    for i in range(GRID * GRID):
-        x, y = i % GRID, i // GRID
-        on_border = x == 0 or y == 0 or x == GRID - 1 or y == GRID - 1
-        if on_border and is_candidate(i):
+    for i in range(w * h):
+        x, y = i % w, i // w
+        if (x == 0 or y == 0 or x == w - 1 or y == h - 1) and is_background(*px[i]):
             bg[i] = True
             queue.append(i)
 
     while queue:
         i = queue.popleft()
-        x, y = i % GRID, i // GRID
+        x, y = i % w, i // w
         for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
             nx, ny = x + dx, y + dy
-            if not (0 <= nx < GRID and 0 <= ny < GRID):
+            if not (0 <= nx < w and 0 <= ny < h):
                 continue
-            j = ny * GRID + nx
-            if not bg[j] and is_candidate(j):
+            j = ny * w + nx
+            if not bg[j] and is_background(*px[j]):
                 bg[j] = True
                 queue.append(j)
 
     return bg
 
 
-def despeckle(bg: list[bool]) -> list[bool]:
+def subject_box(im: Image.Image, probe: int = 192) -> tuple[int, int, int, int]:
+    """Find the subject's padded bounding box, in source pixels.
+
+    Deliberately not squared. A head is much taller than it is wide, so
+    squaring the crop spends most of the grid on empty background — on this
+    portrait it put only 2.3k of 9.2k cells on the face. The grid takes the
+    subject's aspect instead and every cube lands on him.
+    """
+    small = im.resize((probe, probe), Image.BOX)
+    bg = despeckle(flood_background(list(small.getdata()), probe, probe), probe, probe)
+
+    xs = sorted(i % probe for i, is_bg in enumerate(bg) if not is_bg)
+    ys = sorted(i // probe for i, is_bg in enumerate(bg) if not is_bg)
+    if not xs:
+        raise SystemExit("Keying removed the entire image — check GREEN_MARGIN/DARK_CUTOFF")
+
+    # Percentile bounds, not min/max: a handful of stray cells that survive the
+    # key at the frame edge would otherwise drag the box out to nearly the full
+    # image and leave the head sitting small in the middle of it.
+    sx, sy = im.width / probe, im.height / probe
+    left, right = percentile(xs, 0.5) * sx, (percentile(xs, 99.5) + 1) * sx
+    top, bottom = percentile(ys, 0.5) * sy, (percentile(ys, 99.5) + 1) * sy
+
+    pad_x = (right - left) * PAD
+    pad_y = (bottom - top) * PAD
+    x0 = round(max(left - pad_x, 0))
+    y0 = round(max(top - pad_y, 0))
+    x1 = round(min(right + pad_x, im.width))
+    y1 = round(min(bottom + pad_y, im.height))
+    return x0, y0, x1, y1
+
+
+def percentile(values: list[int], pct: float) -> float:
+    if not values:
+        return 0.0
+    ordered = sorted(values)
+    k = (len(ordered) - 1) * pct / 100.0
+    lo = int(k)
+    hi = min(lo + 1, len(ordered) - 1)
+    return ordered[lo] + (ordered[hi] - ordered[lo]) * (k - lo)
+
+
+def despeckle(bg: list[bool], w: int, h: int) -> list[bool]:
     """Drop isolated subject cells, which read as floating grit in 3D."""
     out = list(bg)
-    for i in range(GRID * GRID):
+    for i in range(w * h):
         if bg[i]:
             continue
-        x, y = i % GRID, i // GRID
-        neighbours = 0
-        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
-            nx, ny = x + dx, y + dy
-            if 0 <= nx < GRID and 0 <= ny < GRID and not bg[ny * GRID + nx]:
-                neighbours += 1
+        x, y = i % w, i // w
+        neighbours = sum(
+            1
+            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))
+            if 0 <= x + dx < w and 0 <= y + dy < h and not bg[(y + dy) * w + (x + dx)]
+        )
         if neighbours <= 1:
             out[i] = True
     return out
 
 
 def main() -> None:
-    src = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "source" / "portrait.jpg"
+    src = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_SRC
     if not src.exists():
         sys.exit(f"No source image at {src}")
 
-    colour = load_square(src)
+    full = Image.open(src).convert("RGB")
+    box = subject_box(full)
+    print(f"source {full.width}x{full.height} → subject box {box}")
+
+    # BOX averages the source pixels falling into each cell, which is what we
+    # want: each cube represents its whole cell, not one sampled pixel.
+    crop = full.crop(box)
+    if crop.width >= crop.height:
+        gw, gh = GRID, max(1, round(GRID * crop.height / crop.width))
+    else:
+        gw, gh = max(1, round(GRID * crop.width / crop.height)), GRID
+    colour = crop.resize((gw, gh), Image.BOX)
     px = list(colour.getdata())
+    bg = despeckle(flood_background(px, gw, gh), gw, gh)
 
-    bg = despeckle(background_mask(px))
+    lum = list(ImageOps.grayscale(colour).getdata())
+    subject = [v for i, v in enumerate(lum) if not bg[i]]
+    black = percentile(subject, BLACK_PCT)
+    white = percentile(subject, WHITE_PCT)
+    span = max(white - black, 1.0)
+    print(f"contrast: black={black:.0f} white={white:.0f} over {len(subject)} cells")
 
-    grey = ImageOps.grayscale(colour)
-    lum = list(grey.getdata())
-
-    span = max(WHITE_POINT - BLACK_POINT, 1e-6)
-    out = Image.new("RGBA", (GRID, GRID))
+    out = Image.new("RGBA", (gw, gh))
     pixels = []
     for i, value in enumerate(lum):
         if bg[i]:
             pixels.append((0, 0, 0, 0))
             continue
-        n = (value / 255.0 - BLACK_POINT) / span
-        n = min(1.0, max(0.0, n))
+        n = min(1.0, max(0.0, (value - black) / span))
         v = round(n * 255)
         pixels.append((v, v, v, 255))
 
     out.putdata(pixels)
     dest = ROOT / "relief.png"
     out.save(dest, optimize=True)
-
-    kept = sum(1 for p in pixels if p[3])
-    print(f"{dest.name}: {GRID}x{GRID}, {kept} cubes, {dest.stat().st_size} bytes")
+    print(f"{dest.name}: {gw}x{gh}, {len(subject)} cubes, {dest.stat().st_size} bytes")
 
     # A scaled-up preview, purely so the keying can be eyeballed.
-    preview = out.resize((GRID * 4, GRID * 4), Image.NEAREST)
-    flat = Image.new("RGB", preview.size, (251, 254, 252))
+    preview = out.resize((gw * 4, gh * 4), Image.NEAREST)
+    flat = Image.new("RGB", preview.size, (0, 34, 10))
     flat.paste(preview, (0, 0), preview)
     flat.save(ROOT / "relief-preview.png")
 

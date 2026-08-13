@@ -30,11 +30,45 @@ const sheen = badge?.querySelector('.badge__sheen');
 const CUBE_COLOR = 0xfbfefc;
 const SCULPT_WIDTH = 2.35; // world units across the full grid
 
-// How far the brightest cell sits in front of the darkest, at rest and when
-// fully exploded. The p5 original drove explosion off mouse distance from
-// centre; on a phone the honest equivalent is how far you've tilted.
-const BASE_DEPTH = 0.34;
-const EXPLODE_DEPTH = 1.15;
+// Every tunable in one object so the dev panel can drive them live. The
+// defaults here are what ships; dev/ mutates this and nothing else.
+// See dev/README.md.
+export const params = {
+  // Relief. baseDepth is how far the brightest cell sits in front of the
+  // darkest at rest; explodeDepth is how much further a full tilt pushes it.
+  // The p5 original drove explosion off mouse distance from centre — on a
+  // phone the honest equivalent is how far you've tilted.
+  baseDepth: 0.34,
+  explodeDepth: 1.15,
+  explodeSensitivity: 0.85,
+  explodeDamping: 0.07,
+  // Cube size as a fraction of cell size: min, plus this much more at full
+  // brightness. The size difference keeps the relief legible head-on.
+  cubeMin: 0.55,
+  cubeRange: 0.5,
+  // Framing, as fractions of the visible frustum.
+  fitHeight: 0.72,
+  fitWidth: 0.92,
+  posY: 0.2,
+  // Input.
+  damping: 0.08,
+  gammaScale: 0.024,
+  betaScale: 0.014,
+  sway: 0.32,
+  idleBreath: 0.16,
+  // Lighting.
+  ambient: 1.35,
+  keyLight: 2.1,
+  // Overlay parallax, in degrees at full deflection.
+  overlayTilt: 7,
+  // Foil badge travel, px per radian.
+  foilTravel: 40,
+  grainTravel: 62,
+  sheenTravel: 86,
+  hueRange: 26,
+};
+
+if (typeof window !== 'undefined') window.CARD_PARAMS = params;
 
 // Tilting should feel like moving around a fixed object rather than turning a
 // turntable. If it reads backwards on device, flip these.
@@ -73,12 +107,9 @@ function haptic(ms = 10) {
 // Driven by the same tilt values as the sculpture, so the seal and the relief
 // read as one physical object rather than two effects sharing a screen.
 
-// Travel in px per radian. Each layer moves at a different rate: the parallax
-// between the colour bands, the grating and the specular is most of what
-// sells this as foil rather than as a sliding gradient.
-const FOIL_TRAVEL = 40;
-const GRAIN_TRAVEL = 62;
-const SHEEN_TRAVEL = 86;
+// Each layer moves at a different rate: the parallax between the colour
+// bands, the grating and the specular is most of what sells this as foil
+// rather than as a sliding gradient.
 
 let lastGlint = NaN;
 
@@ -91,16 +122,16 @@ function updateBadge(rotX, rotY) {
 
   // The hue filter forces a repaint, so skip frames that wouldn't show a
   // visible change — matters when idle, and when reduced motion holds it still.
-  if (Math.abs(x - lastGlint) < 0.0015) return;
+  if (Math.abs(x - lastGlint) < 0.0008) return;
   lastGlint = x;
 
-  foil.style.transform = `translate3d(${x * FOIL_TRAVEL}px, ${y * FOIL_TRAVEL}px, 0)`;
-  grain.style.transform = `translate3d(${x * GRAIN_TRAVEL}px, ${y * GRAIN_TRAVEL}px, 0)`;
-  sheen.style.transform = `translate3d(${x * SHEEN_TRAVEL}px, ${y * SHEEN_TRAVEL}px, 0)`;
+  foil.style.transform = `translate3d(${x * params.foilTravel}px, ${y * params.foilTravel}px, 0)`;
+  grain.style.transform = `translate3d(${x * params.grainTravel}px, ${y * params.grainTravel}px, 0)`;
+  sheen.style.transform = `translate3d(${x * params.sheenTravel}px, ${y * params.sheenTravel}px, 0)`;
   // Real foil shifts colour with viewing angle; it doesn't only slide. Kept
   // narrow so the stripe stays within the CTA gradient's yellow→green→magenta
   // range — a wider swing rotates the magenta into cyan, which is off-palette.
-  foil.style.filter = `hue-rotate(${x * 26}deg)`;
+  foil.style.filter = `hue-rotate(${x * params.hueRange}deg)`;
 }
 
 // ── Relief data ──────────────────────────────────────────
@@ -146,8 +177,9 @@ camera.position.z = 5.0;
 // Cubes need shading to read as cubes; on a dark ground a flat fill just
 // becomes a silhouette. Key from the upper left, generous ambient so the
 // unlit faces don't crush to black.
-scene.add(new THREE.AmbientLight(0xffffff, 1.35));
-const key = new THREE.DirectionalLight(0xffffff, 2.1);
+const ambientLight = new THREE.AmbientLight(0xffffff, params.ambient);
+scene.add(ambientLight);
+const key = new THREE.DirectionalLight(0xffffff, params.keyLight);
 key.position.set(-0.6, 0.9, 1.2);
 scene.add(key);
 
@@ -157,11 +189,16 @@ scene.add(sculpture);
 let mesh = null;
 let cells = [];
 let cellSize = 0;
+// The grid follows the portrait's aspect, so height is not width.
+let sculptW = 0;
+let sculptH = 0;
 const dummy = new THREE.Object3D();
 
 function buildSculpture(relief) {
   cells = relief.cells;
   cellSize = SCULPT_WIDTH / relief.grid;
+  sculptW = SCULPT_WIDTH;
+  sculptH = cellSize * relief.rows;
 
   const geometry = new THREE.BoxGeometry(1, 1, 1);
   const material = new THREE.MeshLambertMaterial({ color: CUBE_COLOR });
@@ -176,7 +213,7 @@ function buildSculpture(relief) {
     // Brighter cells sit slightly larger as well as further forward — the
     // size difference is what keeps the relief legible head-on, before any
     // tilt has pushed it into depth.
-    cell.size = cellSize * (0.55 + cell.height * 0.5);
+    cell.size = cellSize * (params.cubeMin + cell.height * params.cubeRange);
   }
 
   sculpture.add(mesh);
@@ -188,7 +225,8 @@ function applyExplosion(amount) {
   if (!mesh) return;
   for (let i = 0; i < cells.length; i++) {
     const cell = cells[i];
-    const z = (cell.height - 0.5) * BASE_DEPTH + cell.height * EXPLODE_DEPTH * amount;
+    const z = (cell.height - 0.5) * params.baseDepth + cell.height * params.explodeDepth * amount;
+    cell.size = cellSize * (params.cubeMin + cell.height * params.cubeRange);
     dummy.position.set(cell.x, cell.y, z);
     dummy.scale.setScalar(cell.size);
     dummy.updateMatrix();
@@ -213,11 +251,13 @@ function resize() {
   // width would blow it up to nothing but a cheek.
   const visibleH = 2 * camera.position.z * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
   const visibleW = visibleH * camera.aspect;
-  sculpture.scale.setScalar(Math.min((visibleH * 0.66) / SCULPT_WIDTH, (visibleW * 0.98) / SCULPT_WIDTH));
+  if (sculptW) {
+    sculpture.scale.setScalar(Math.min((visibleH * params.fitHeight) / sculptH, (visibleW * params.fitWidth) / sculptW));
+  }
 
   // Sit it high: it crops off the top edge, which is what makes it read as
   // full bleed, and leaves the lower third clear for the type.
-  sculpture.position.y = visibleH * 0.2;
+  sculpture.position.y = visibleH * params.posY;
 }
 
 window.addEventListener('resize', resize);
@@ -257,8 +297,8 @@ function onOrientation(e) {
   // angle the phone happened to be held at.
   if (!baseline) baseline = { beta: e.beta, gamma: e.gamma };
 
-  tilt.targetY = clamp(GAMMA_SIGN * (e.gamma - baseline.gamma) * 0.024, -1.1, 1.1);
-  tilt.targetX = clamp(BETA_SIGN * (e.beta - baseline.beta) * 0.014, -0.45, 0.45);
+  tilt.targetY = clamp(GAMMA_SIGN * (e.gamma - baseline.gamma) * params.gammaScale, -1.1, 1.1);
+  tilt.targetX = clamp(BETA_SIGN * (e.beta - baseline.beta) * params.betaScale, -0.45, 0.45);
   engage();
 }
 
@@ -337,12 +377,10 @@ canvas.addEventListener('pointercancel', endDrag);
 // CSS via translateZ). Small angles: this is a card catching the light, not a
 // carousel.
 
-const OVERLAY_TILT = 7; // degrees at full deflection
-
 function updateOverlay(rotX, rotY) {
   if (!overlay || reduceMotion) return;
-  const ry = clamp(rotY * OVERLAY_TILT, -9, 9);
-  const rx = clamp(-rotX * OVERLAY_TILT, -7, 7);
+  const ry = clamp(rotY * params.overlayTilt, -12, 12);
+  const rx = clamp(-rotX * params.overlayTilt, -10, 10);
   overlay.style.transform = `rotateX(${rx}deg) rotateY(${ry}deg)`;
 }
 
@@ -360,7 +398,13 @@ let running = true;
 let explosion = 0;
 let appliedExplosion = -1;
 let wasFacing = true;
+let paramsDirty = false;
 const clock = new THREE.Clock();
+
+// The dev panel fires this after mutating params so geometry-affecting
+// changes (cube size, framing) get re-applied rather than waiting for a
+// resize that may never come.
+window.addEventListener('card-params-changed', () => { paramsDirty = true; });
 
 document.addEventListener('visibilitychange', () => {
   running = !document.hidden;
@@ -378,11 +422,11 @@ function frame() {
 
   // Ease the idle sway out once the user takes over, rather than cutting it.
   if (engaged) idleAmount += (0 - idleAmount) * 0.04;
-  const sway = reduceMotion ? 0 : Math.sin(t * 0.45) * 0.32 * idleAmount;
+  const sway = reduceMotion ? 0 : Math.sin(t * 0.45) * params.sway * idleAmount;
   const nod = reduceMotion ? 0 : Math.sin(t * 0.31) * 0.05 * idleAmount;
 
-  tilt.x += (tilt.targetX - tilt.x) * 0.08;
-  tilt.y += (tilt.targetY - tilt.y) * 0.08;
+  tilt.x += (tilt.targetX - tilt.x) * params.damping;
+  tilt.y += (tilt.targetY - tilt.y) * params.damping;
 
   const rotY = tilt.y + sway;
   const rotX = tilt.x + nod;
@@ -392,9 +436,13 @@ function frame() {
 
   // How far you've tilted is how far it bursts apart. Idle keeps a slow
   // breath in it so the relief is never completely inert.
-  const idleBreath = reduceMotion ? 0 : (0.5 + 0.5 * Math.sin(t * 0.6)) * 0.16 * idleAmount;
-  const target = Math.min(1, Math.hypot(tilt.x, tilt.y) / 0.85) + idleBreath;
-  explosion += (target - explosion) * 0.07;
+  const breath = reduceMotion ? 0 : (0.5 + 0.5 * Math.sin(t * 0.6)) * params.idleBreath * idleAmount;
+  const target = Math.min(1, Math.hypot(tilt.x, tilt.y) / params.explodeSensitivity) + breath;
+  explosion += (target - explosion) * params.explodeDamping;
+
+  ambientLight.intensity = params.ambient;
+  key.intensity = params.keyLight;
+  if (paramsDirty) { resize(); paramsDirty = false; appliedExplosion = -1; }
 
   // Rewriting 7k instance matrices is the one genuinely expensive thing here,
   // so skip it when the change wouldn't be visible.
